@@ -103,7 +103,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: |
-            ./gradlew --no-daemon connectedDebugAndroidTest > device.log 2>&1 || (grep -E "^e: |FAILED|Exception|expected|Error|failed" device.log | head -40 | sed 's/^/::error::/'; exit 1)
+            ./gradlew --no-daemon connectedDebugAndroidTest > device.log 2>&1 || (grep -E "TELTEST|^e: |FAILED|Exception|expected|Error|failed|at app\.tel" device.log | head -40 | sed 's/^/::error::/'; exit 1)
       - uses: actions/upload-artifact@v4
         if: always()
         with:

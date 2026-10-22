@@ -36,8 +36,20 @@ class AppFlowTest {
 
     @After fun close() { scenario?.close() }
 
-    private fun waitForText(text: String) = compose.waitUntil(10_000) {
-        compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+    private fun waitForText(text: String) {
+        try {
+            compose.waitUntil(15_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
+        } catch (t: Throwable) {
+            val screen = runCatching {
+                compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes().flatMap { root ->
+                    fun texts(n: androidx.compose.ui.semantics.SemanticsNode): List<String> =
+                        (n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.map { it.text } ?: emptyList()) +
+                            n.children.flatMap { texts(it) }
+                    texts(root)
+                }.joinToString(" | ")
+            }.getOrDefault("?")
+            throw AssertionError("TELTEST timed out waiting for '$text'. Screen: ${screen.take(900)}")
+        }
     }
 
     private fun enter(tag: String, value: String) {
