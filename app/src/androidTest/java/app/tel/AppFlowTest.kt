@@ -58,9 +58,9 @@ class AppFlowTest {
     }
 
     private fun addRefuel(odo: String, litres: String, price: String) {
-        compose.onAllNodesWithText("Add refuelling")[0].performClick()
+        compose.onAllNodesWithText("Add refuelling")[0].performScrollTo().performClick()
         waitForText("Enter values manually")
-        compose.onNodeWithText("Enter values manually").performClick()
+        compose.onNodeWithText("Enter values manually").performScrollTo().performClick()
         waitForText("Review refuelling")
         enter("field_odometer_before", odo)
         enter("field_fuel_added", litres)
