@@ -43,7 +43,7 @@ class AppFlowTest {
             val screen = runCatching {
                 compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes().flatMap { root ->
                     fun texts(n: androidx.compose.ui.semantics.SemanticsNode): List<String> =
-                        (n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.map { it.text } ?: emptyList()) +
+                        (n.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.Text) { null }?.map { it.text } ?: emptyList()) +
                             n.children.flatMap { texts(it) }
                     texts(root)
                 }.joinToString(" | ")
