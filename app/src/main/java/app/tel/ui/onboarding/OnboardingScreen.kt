@@ -90,6 +90,7 @@ fun OnboardingScreen() {
                 onClick = {
                     saving = true
                     scope.launch {
+                      try {
                         val id = UUID.randomUUID().toString()
                         container.repository.saveVehicle(
                             Vehicle(
@@ -105,6 +106,9 @@ fun OnboardingScreen() {
                             setSelectedVehicle(id)
                             setOnboarded()
                         }
+                      } finally {
+                        saving = false
+                      }
                     }
                 },
                 enabled = canSave,

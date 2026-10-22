@@ -71,7 +71,7 @@ class AppFlowTest {
 
     @Test fun onboardingThenTwoRefuelsThenSwitchUnits() {
         waitForText("Get started")
-        compose.onNodeWithText("Get started").performClick()
+        compose.onNodeWithText("Get started").performScrollTo().performClick()
         waitForText("No refuelling records yet.")
 
         addRefuel("50000", "30", "100")
