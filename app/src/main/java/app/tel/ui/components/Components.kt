@@ -119,18 +119,21 @@ fun NumberField(
     decimal: Boolean = true,
 ) {
     val errorColor = MaterialTheme.colorScheme.tertiary
-    val supportContent: (@Composable () -> Unit)? = when {
-        error != null -> @Composable { Text(error) }
-        warning != null -> @Composable {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Warning, null, tint = errorColor, modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(4.dp))
-                Text(warning, color = errorColor)
-            }
+    val errorContent: @Composable () -> Unit = { Text(error.orEmpty()) }
+    val warningContent: @Composable () -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Warning, null, tint = errorColor, modifier = Modifier.size(14.dp))
+            Spacer(Modifier.width(4.dp))
+            Text(warning.orEmpty(), color = errorColor)
         }
+    }
+    val supportContent: (@Composable () -> Unit)? = when {
+        error != null -> errorContent
+        warning != null -> warningContent
         else -> supporting
     }
-    val suffixContent: (@Composable () -> Unit)? = if (unit != null) @Composable { Text(unit) } else null
+    val unitContent: @Composable () -> Unit = { Text(unit.orEmpty()) }
+    val suffixContent: (@Composable () -> Unit)? = if (unit != null) unitContent else null
     OutlinedTextField(
         value = value,
         onValueChange = { s -> onChange(s.filter { it.isDigit() || it == '.' || it == ',' }) },

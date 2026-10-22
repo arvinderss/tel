@@ -329,6 +329,7 @@ private fun ReviewStep(ui: RefuelUi, vm: RefuelViewModel, settings: AppSettings)
 private fun ReviewField(ui: RefuelUi, vm: RefuelViewModel, f: FormField, unit: String, hint: String? = null) {
     val state = ui.field(f)
     val issue = ui.issueFor(f)
+    val hintContent: @Composable () -> Unit = { Text(hint.orEmpty()) }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         NumberField(
             label = f.label,
@@ -338,7 +339,7 @@ private fun ReviewField(ui: RefuelUi, vm: RefuelViewModel, f: FormField, unit: S
             unit = unit,
             error = issue?.takeIf { it.severity == app.tel.domain.validation.Severity.ERROR }?.message,
             warning = issue?.takeIf { it.severity == app.tel.domain.validation.Severity.WARNING }?.message,
-            supporting = hint?.let { h -> @Composable { Text(h) } },
+            supporting = if (hint != null) hintContent else null,
         )
         if (state.source != ValueSource.EMPTY) SourceTag(state.source, state.needsReview, state.confidence)
         if (state.candidates.isNotEmpty()) {

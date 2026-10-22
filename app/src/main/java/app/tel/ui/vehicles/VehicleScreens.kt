@@ -166,10 +166,11 @@ fun VehicleEditScreen(vehicleId: String?, settings: AppSettings, onDone: () -> U
                 CurrencyPicker(currency) { currency = it }
                 OutlinedTextField(make, { make = it }, label = { Text("Make (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(model, { model = it }, label = { Text("Model (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                val yearHint: @Composable () -> Unit = { Text(yearError.orEmpty()) }
                 OutlinedTextField(
                     year, { s -> year = s.filter { it.isDigit() }.take(4) }, label = { Text("Year (optional)") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), isError = yearError != null,
-                    supportingText = if (yearError != null) @Composable { Text(yearError) } else null, modifier = Modifier.fillMaxWidth(),
+                    supportingText = if (yearError != null) yearHint else null, modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(registration, { registration = it }, label = { Text("Registration or nickname (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))

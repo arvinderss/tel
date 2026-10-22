@@ -70,11 +70,12 @@ fun OnboardingScreen() {
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            val nameHint: @Composable () -> Unit = { Text("Enter a name") }
             OutlinedTextField(
                 value = name, onValueChange = { name = it }, label = { Text("Vehicle name") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
                 isError = name.isBlank(),
-                supportingText = if (name.isBlank()) @Composable { Text("Enter a name") } else null,
+                supportingText = if (name.isBlank()) nameHint else null,
             )
             FuelTypePicker(fuel) { fuel = it }
             UnitSystemPicker(units) { units = it }

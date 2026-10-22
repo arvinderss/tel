@@ -105,7 +105,7 @@ fun DetailScreen(eventId: String, settings: AppSettings, onBack: () -> Unit, onE
                         SectionTitle("Read from photos")
                         ocr.sortedBy { it.fieldName }.forEach { r ->
                             Row2(
-                                r.fieldName.replace('_', ' ').replace('.', ' · '),
+                                r.fieldName.replace("_", " ").replace(".", " · "),
                                 "${r.rawText.ifBlank { r.parsedValue?.toPlainString() ?: "—" }} · ${(r.confidence * 100).toInt()}% confidence",
                             )
                         }
