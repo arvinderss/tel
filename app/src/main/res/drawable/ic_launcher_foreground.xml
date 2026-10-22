@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fuel drop with a small gauge needle. 108dp canvas, art kept inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M54,28 C54,28 36,49 36,62 C36,72 44,80 54,80 C64,80 72,72 72,62 C72,49 54,28 54,28 Z" />
+    <path android:fillColor="#FF0F5C4A"
+        android:pathData="M45,66 A9,9 0 0 1 63,66 L60,66 A6,6 0 0 0 48,66 Z" />
+    <path android:fillColor="#FF0F5C4A"
+        android:pathData="M53,66 L58.5,58.5 L59.8,59.6 L55,67 Z" />
+</vector>
