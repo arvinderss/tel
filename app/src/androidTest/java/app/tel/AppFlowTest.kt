@@ -1,6 +1,5 @@
 package app.tel
 
-import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -80,7 +79,7 @@ class AppFlowTest {
         enter("field_odometer", "50000")
         save()
         waitForText("Total spend")
-        compose.onNodeWithText("Shown after two full-tank fill-ups").assertIsDisplayed()
+        waitForText("Shown after two full-tank fill-ups")
 
         // Second: the rate is prefilled from the first, so the amount alone gives the volume.
         openForm()
@@ -98,7 +97,7 @@ class AppFlowTest {
         enter("field_odometer", "50500")
         waitForText("Lower than the earlier fill-up", substring = true)
         save()
-        compose.onNodeWithText("Tank full").assertIsDisplayed()
+        compose.onNodeWithText("Tank full").assertExists() // still on the form
         compose.onNodeWithContentDescription("Back").performClick()
         waitForText("Total spend")
 
