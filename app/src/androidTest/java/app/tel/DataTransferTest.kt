@@ -51,7 +51,7 @@ class DataTransferTest {
 
     @After fun tearDown() { scope.cancel(); db.close() }
 
-    @Test fun csvRoundTripReplace() = runBlocking {
+    @Test fun csvRoundTripReplace() = runBlocking<Unit> {
         val bytes = ByteArrayOutputStream().also { transfer.exportCsv(it) }.toByteArray()
         val r = transfer.read(bytes)
         assertEquals(1, r.vehicles.size); assertEquals(2, r.events.size)
@@ -65,7 +65,7 @@ class DataTransferTest {
         assertEquals(500.0, db.refuels().get("e2")!!.distanceSincePrevious!!.toDouble(), 0.0)
     }
 
-    @Test fun mergeDoesNotDuplicate() = runBlocking {
+    @Test fun mergeDoesNotDuplicate() = runBlocking<Unit> {
         val bytes = ByteArrayOutputStream().also { transfer.exportCsv(it) }.toByteArray()
         transfer.restore(transfer.read(bytes), RestoreMode.MERGE)
         assertEquals(2, db.refuels().count())
@@ -76,7 +76,7 @@ class DataTransferTest {
         assertTrue(failed)
     }
 
-    @Test fun restoresZipBackupFromVersion1() = runBlocking {
+    @Test fun restoresZipBackupFromVersion1() = runBlocking<Unit> {
         val data = """
             {"format":1,
              "vehicles":[{"id":"v1","name":"Old Car","make":"","model":"","year":null,"fuel_type":"PETROL","tank_capacity":"40",
@@ -101,7 +101,7 @@ class DataTransferTest {
         assertEquals(15.0, o2.mileage!!.toDouble(), 0.0001)
     }
 
-    @Test fun linkedCsvIsUpdatedAfterEveryChange() = runBlocking {
+    @Test fun linkedCsvIsUpdatedAfterEveryChange() = runBlocking<Unit> {
         val file = File(ctx.cacheDir, "tel-fillups-test.csv").apply { delete() }
         val copy = CsvCopy(ctx, repo, settings, transfer, scope)
         copy.start()

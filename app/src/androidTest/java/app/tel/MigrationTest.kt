@@ -52,7 +52,7 @@ class MigrationTest {
         db.close()
     }
 
-    @Test fun migrates1To3KeepingRecords() = runBlocking {
+    @Test fun migrates1To3KeepingRecords() = runBlocking<Unit> {
         createV1()
         val db = Room.databaseBuilder(ctx, TelDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
         try {

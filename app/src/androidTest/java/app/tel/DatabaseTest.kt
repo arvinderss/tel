@@ -42,7 +42,7 @@ class DatabaseTest {
 
     @After fun tearDown() { db.close() }
 
-    @Test fun insertQueryAndDerivedColumns() = runBlocking {
+    @Test fun insertQueryAndDerivedColumns() = runBlocking<Unit> {
         repo.saveRefuel(ev("a", "car", 1, "143140", "36.35", "112.41", "4086.10"))
         repo.saveRefuel(ev("b", "car", 10, "143640", "38.06", "110.68", "4212.48"))
         val b = db.refuels().get("b")!!
@@ -54,14 +54,14 @@ class DatabaseTest {
         assertEquals(2, repo.events.first().size)
     }
 
-    @Test fun updateRecomputesFollowingEvent() = runBlocking {
+    @Test fun updateRecomputesFollowingEvent() = runBlocking<Unit> {
         repo.saveRefuel(ev("a", "car", 1, "1000", "30", "100", "3000"))
         repo.saveRefuel(ev("b", "car", 10, "1450", "30", "100", "3000"))
         repo.saveRefuel(ev("a", "car", 1, "1150", "30", "100", "3000"))
         assertEquals(10.0, db.refuels().get("b")!!.mileage!!.toDouble(), 0.0001)
     }
 
-    @Test fun vehiclesAreIndependent() = runBlocking {
+    @Test fun vehiclesAreIndependent() = runBlocking<Unit> {
         repo.saveRefuel(ev("a", "car", 1, "1000", "30", "100", "3000"))
         repo.saveRefuel(ev("x", "suv", 2, "9000", "40", "90", "3600"))
         repo.saveRefuel(ev("b", "car", 10, "1300", "20", "100", "2000"))
@@ -69,7 +69,7 @@ class DatabaseTest {
         assertNull(db.refuels().get("x")!!.mileage)
     }
 
-    @Test fun partialFillCountsAtNextFullTank() = runBlocking {
+    @Test fun partialFillCountsAtNextFullTank() = runBlocking<Unit> {
         repo.saveRefuel(ev("a", "car", 1, "1000", "30", "100", "3000"))
         repo.saveRefuel(ev("p", "car", 5, "1200", "10", "100", "1000").copy(filledToFull = false))
         repo.saveRefuel(ev("b", "car", 10, "1600", "30", "100", "3000"))
@@ -78,7 +78,7 @@ class DatabaseTest {
         assertEquals(15.0, db.refuels().get("b")!!.mileage!!.toDouble(), 0.0001)
     }
 
-    @Test fun deleteEventAndVehicleCascade() = runBlocking {
+    @Test fun deleteEventAndVehicleCascade() = runBlocking<Unit> {
         repo.saveRefuel(ev("a", "car", 1, "1000", "30", "100", "3000"))
         assertNotNull(db.refuels().get("a"))
 
