@@ -3,7 +3,6 @@ package app.tel
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.tel.data.FuelRepository
-import app.tel.data.ImageStore
 import app.tel.data.db.TelDatabase
 import app.tel.domain.model.MileageStatus
 import app.tel.domain.model.FuelType
@@ -19,7 +18,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 import java.math.BigDecimal
 
 @RunWith(AndroidJUnit4::class)
@@ -38,7 +36,7 @@ class DatabaseTest {
 
     @Before fun setUp() = runBlocking<Unit> {
         db = TelDatabase.inMemory(ctx)
-        repo = FuelRepository(db, ImageStore(ctx))
+        repo = FuelRepository(db)
         repo.saveVehicle(car); repo.saveVehicle(suv)
     }
 
@@ -80,29 +78,8 @@ class DatabaseTest {
         assertEquals(15.0, db.refuels().get("b")!!.mileage!!.toDouble(), 0.0001)
     }
 
-    @Test fun removingPhotoOnEditDeletesFile() = runBlocking {
-        val d1 = File(ctx.cacheDir, "p1.jpg").apply { writeBytes(byteArrayOf(1)) }
-        val d2 = File(ctx.cacheDir, "p2.jpg").apply { writeBytes(byteArrayOf(2)) }
-        val e = ev("a", "car", 1, "1000", "30", "100", "3000")
-        repo.saveRefuel(e, listOf(d1, d2))
-        val photos = repo.imagesFor("a")
-        assertEquals(2, photos.size)
-        repo.saveRefuel(e, removedPhotoIds = setOf(photos[0].id))
-        assertEquals(1, repo.imagesFor("a").size)
-        assertTrue(!photos[0].file.exists())
-        assertTrue(photos[1].file.exists())
-    }
-
     @Test fun deleteEventAndVehicleCascade() = runBlocking {
-        val draft = File(ctx.cacheDir, "t.jpg").apply { writeBytes(byteArrayOf(1, 2, 3)) }
-        repo.saveRefuel(ev("a", "car", 1, "1000", "30", "100", "3000"), listOf(draft))
-        assertEquals(1, db.images().forEvent("a").size)
-        val photo = repo.imagesFor("a").first()
-        assertTrue(photo.file.exists())
-
-        repo.deletePhoto(photo.id)
-        assertTrue(!photo.file.exists())
-        assertEquals(0, db.images().forEvent("a").size)
+        repo.saveRefuel(ev("a", "car", 1, "1000", "30", "100", "3000"))
         assertNotNull(db.refuels().get("a"))
 
         repo.deleteRefuel("a")

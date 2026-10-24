@@ -99,8 +99,6 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
-    // Reads EXIF orientation so stored photos are upright (metadata is then discarded).
-    implementation("androidx.exifinterface:exifinterface:1.3.7")
 
 
     debugImplementation("androidx.compose.ui:ui-tooling")

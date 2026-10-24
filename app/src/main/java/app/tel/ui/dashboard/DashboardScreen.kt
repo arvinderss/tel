@@ -35,6 +35,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import app.tel.ui.appContainer
+import app.tel.ui.csv.rememberCsvActions
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -66,6 +73,10 @@ fun DashboardScreen(settings: AppSettings, onAddRefuel: () -> Unit, onOpenEvent:
     val ui by vm.ui.collectAsStateWithLifecycle()
     val fmt = Formatter(settings.unitSystem)
     var showRange by rememberSaveable { mutableStateOf(false) }
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val container = appContainer()
+    val csv = rememberCsvActions(onMessage = { m -> scope.launch { snackbar.showSnackbar(m) } })
 
     Column(
         Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -73,6 +84,14 @@ fun DashboardScreen(settings: AppSettings, onAddRefuel: () -> Unit, onOpenEvent:
     ) {
         Column(Modifier.widthIn(max = 900.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Tel", style = MaterialTheme.typography.headlineMedium)
+            SnackbarHost(snackbar)
+            CsvCards(
+                settings = settings,
+                onSetUp = csv.setUp,
+                onSnooze = { scope.launch { container.settings.snoozeCsvReminder(System.currentTimeMillis() + SNOOZE_MS) } },
+                onNever = { scope.launch { container.settings.neverRemindCsv() } },
+                onStop = { scope.launch { container.csvCopy.unlink() } },
+            )
 
             when {
                 ui.loading -> Box(Modifier.fillMaxWidth().padding(48.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -271,5 +290,45 @@ private fun CustomRangeDialog(onDismiss: () -> Unit, onConfirm: (LocalDate, Loca
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     ) {
         DateRangePicker(state = state, modifier = Modifier.weight(1f), showModeToggle = true)
+    }
+}
+
+private const val SNOOZE_MS = 7L * 24 * 60 * 60 * 1000
+
+/** The CSV copy reminder (until set up or declined) and a warning if the file can't be updated. */
+@Composable
+private fun CsvCards(settings: AppSettings, onSetUp: () -> Unit, onSnooze: () -> Unit, onNever: () -> Unit, onStop: () -> Unit) {
+    val csv = settings.csv
+    when {
+        csv.enabled && csv.error != null -> Card(
+            Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Your CSV copy isn't being updated", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                Text(csv.error, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onSetUp) { Text("Choose a new file") }
+                    TextButton(onClick = onStop) { Text("Stop copying") }
+                }
+            }
+        }
+        csv.shouldRemind(System.currentTimeMillis()) -> Card(
+            Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Keep a copy outside the app", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                Text(
+                    "Tel can keep one CSV file on your phone up to date with all your fill-ups. It stays even if you uninstall Tel, and opens in any spreadsheet.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Button(onClick = onSetUp) { Text("Set up CSV copy") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onSnooze) { Text("Not now") }
+                    TextButton(onClick = onNever) { Text("Don't remind me") }
+                }
+            }
+        }
     }
 }

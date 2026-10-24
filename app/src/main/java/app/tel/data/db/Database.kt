@@ -71,25 +71,6 @@ interface RefuelDao {
 }
 
 @Dao
-interface ImageDao {
-    @Query("SELECT * FROM images WHERE refueling_event_id = :eventId")
-    suspend fun forEvent(eventId: String): List<ImageEntity>
-
-    @Query("SELECT * FROM images WHERE refueling_event_id = :eventId")
-    fun observeForEvent(eventId: String): Flow<List<ImageEntity>>
-
-    @Query("SELECT * FROM images") suspend fun all(): List<ImageEntity>
-
-    @Upsert suspend fun upsert(i: ImageEntity)
-
-    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertIgnore(i: List<ImageEntity>)
-
-    @Query("DELETE FROM images WHERE id = :id") suspend fun delete(id: String)
-
-    @Query("SELECT * FROM images WHERE id = :id") suspend fun get(id: String): ImageEntity?
-}
-
-@Dao
 interface SettingDao {
     @Query("SELECT * FROM settings") fun observeAll(): Flow<List<SettingEntity>>
     @Query("SELECT * FROM settings") suspend fun all(): List<SettingEntity>
@@ -100,22 +81,21 @@ interface SettingDao {
 }
 
 @Database(
-    entities = [VehicleEntity::class, RefuelEntity::class, ImageEntity::class, SettingEntity::class],
-    version = 2,
+    entities = [VehicleEntity::class, RefuelEntity::class, SettingEntity::class],
+    version = 3,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
 abstract class TelDatabase : RoomDatabase() {
     abstract fun vehicles(): VehicleDao
     abstract fun refuels(): RefuelDao
-    abstract fun images(): ImageDao
     abstract fun settings(): SettingDao
 
     companion object {
         const val NAME = "tel.db"
 
         fun create(context: Context): TelDatabase =
-            Room.databaseBuilder(context, TelDatabase::class.java, NAME).addMigrations(MIGRATION_1_2).build()
+            Room.databaseBuilder(context, TelDatabase::class.java, NAME).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
 
         fun inMemory(context: Context): TelDatabase =
             Room.inMemoryDatabaseBuilder(context, TelDatabase::class.java).allowMainThreadQueries().build()
@@ -129,6 +109,7 @@ abstract class TelDatabase : RoomDatabase() {
  *  - old records are marked as full-tank fills: v1 defaulted the switch to off and treated
  *    such fills as "refilled to the same level", so this keeps their mileage figures
  * Room runs migrations with foreign keys off, so the table can be rebuilt in place.
+ * (Photos were kept here and removed in v3.)
  */
 val MIGRATION_1_2 = object : Migration(1, 2) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -152,5 +133,12 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         db.execSQL("ALTER TABLE `refueling_events_new` RENAME TO `refueling_events`")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_refueling_events_vehicle_id` ON `refueling_events` (`vehicle_id`)")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_refueling_events_timestamp` ON `refueling_events` (`timestamp`)")
+    }
+}
+
+/** v2 → v3: photos removed. Photo files are deleted by [app.tel.AppContainer.removeLegacyFiles]. */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS `images`")
     }
 }

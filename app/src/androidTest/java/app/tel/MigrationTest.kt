@@ -5,8 +5,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.tel.data.FuelRepository
-import app.tel.data.ImageStore
 import app.tel.data.db.MIGRATION_1_2
+import app.tel.data.db.MIGRATION_2_3
 import app.tel.data.db.TelDatabase
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -18,7 +18,7 @@ import org.junit.runner.RunWith
 import java.math.BigDecimal
 
 /**
- * Builds a database exactly as version 1 of the app created it, then opens it with the current
+ * Builds a database exactly as version 1 of the app created it, then upgrades it to the current
  * Room schema. Room validates every table against the entities, so a wrong migration fails here.
  */
 @RunWith(AndroidJUnit4::class)
@@ -52,9 +52,9 @@ class MigrationTest {
         db.close()
     }
 
-    @Test fun migrates1To2KeepingRecordsAndPhotos() = runBlocking {
+    @Test fun migrates1To3KeepingRecords() = runBlocking {
         createV1()
-        val db = Room.databaseBuilder(ctx, TelDatabase::class.java, name).addMigrations(MIGRATION_1_2).build()
+        val db = Room.databaseBuilder(ctx, TelDatabase::class.java, name).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
         try {
             val a = db.refuels().get("a")!!
             val b = db.refuels().get("b")!!
@@ -63,9 +63,8 @@ class MigrationTest {
             assertEquals(0, BigDecimal("4086.10").compareTo(a.totalCost))
             assertTrue(a.filledToFull)
             assertEquals("first", a.notes)
-            assertEquals(1, db.images().forEvent("a").size) // photo rows survive the table rebuild
 
-            val repo = FuelRepository(db, ImageStore(ctx))
+            val repo = FuelRepository(db)
             repo.recomputeAll()
             // 500 km on 38.06 L
             assertEquals(13.137, db.refuels().get("b")!!.mileage!!.toDouble(), 0.001)
@@ -74,7 +73,8 @@ class MigrationTest {
             // Foreign keys still cascade after the rebuild.
             db.vehicles().delete("v1")
             assertEquals(0, db.refuels().count())
-            assertEquals(0, db.images().all().size)
+            // The photos table is gone.
+            db.openHelper.readableDatabase.query("SELECT name FROM sqlite_master WHERE name = 'images'").use { assertEquals(0, it.count) }
         } finally {
             db.close()
         }

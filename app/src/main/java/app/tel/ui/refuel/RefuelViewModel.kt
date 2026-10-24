@@ -1,6 +1,5 @@
 package app.tel.ui.refuel
 
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.tel.AppContainer
@@ -23,14 +22,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.io.File
 import java.math.BigDecimal
 import java.util.UUID
 
 enum class Step { LOADING, FORM, SAVING, SAVED }
-
-/** A photo on the form: either already stored ([storedId]) or a new draft file. */
-data class PhotoItem(val key: String, val file: File, val storedId: String? = null)
 
 /** The fill-up shown next to the odometer field, to catch typos. */
 data class OdometerReference(val km: BigDecimal, val timestamp: Long)
@@ -48,8 +43,7 @@ data class RefuelUi(
     val rateFrom: Long? = null,
     val odometer: String = "",
     val previousOdometer: OdometerReference? = null,
-    val photos: List<PhotoItem> = emptyList(),
-    val removedPhotoIds: Set<String> = emptySet(),
+    val showPhotoTip: Boolean = false,
     val notes: String = "",
     val missedPrevious: Boolean = false,
     val issues: List<Issue> = emptyList(),
@@ -61,11 +55,6 @@ data class RefuelUi(
     val errors get() = issues.filter { it.severity == Severity.ERROR }
     val warnings get() = issues.filter { it.severity == Severity.WARNING }
     fun issueFor(field: String) = issues.firstOrNull { it.field == field }
-    val canAddPhoto get() = photos.size < MAX_PHOTOS
-
-    companion object {
-        const val MAX_PHOTOS = 3
-    }
 }
 
 fun PumpField.key() = when (this) {
@@ -99,6 +88,7 @@ class RefuelViewModel(private val c: AppContainer, private val existingId: Strin
             val vid = settings.selectedVehicleId?.takeIf { id -> vehicles.any { it.id == id } } ?: vehicles.firstOrNull()?.id
             _ui.value = RefuelUi(
                 step = Step.FORM, vehicles = vehicles, vehicleId = vid, unitSystem = units, pump = emptyTriad(units),
+                showPhotoTip = !settings.photoTipHidden,
                 message = if (existingId != null) "That fill-up no longer exists." else null,
             )
             prefillRate()
@@ -111,12 +101,11 @@ class RefuelViewModel(private val c: AppContainer, private val existingId: Strin
                 volume = e.fuelAddedL?.let { Units.litresToDisplay(it, units) },
                 rateScale = fine, volumeScale = fine,
             )
-            val photos = c.repository.imagesFor(e.id).map { PhotoItem(it.id, it.file, storedId = it.id) }
             _ui.value = RefuelUi(
                 step = Step.FORM, isEdit = true, vehicles = vehicles, vehicleId = e.vehicleId, unitSystem = units,
                 timestamp = e.timestamp, filledToFull = e.filledToFull, pump = pump,
                 odometer = Input.format(e.odometerKm?.let { Units.kmToDisplay(it, units) }, 1),
-                photos = photos, notes = e.notes, missedPrevious = e.missedPrevious,
+                notes = e.notes, missedPrevious = e.missedPrevious,
             )
         }
         refresh()
@@ -154,35 +143,9 @@ class RefuelViewModel(private val c: AppContainer, private val existingId: Strin
         viewModelScope.launch { block(); refresh() }
     }
 
-    // ------------------------------------------------------------------ photos
-
-    fun newCameraFile(): File = c.imageStore.newCameraFile()
-
-    fun addPhotos(uris: List<Uri>) {
-        viewModelScope.launch {
-            for (uri in uris) {
-                if (!_ui.value.canAddPhoto) {
-                    _ui.update { it.copy(message = "Up to ${RefuelUi.MAX_PHOTOS} photos per fill-up.") }
-                    break
-                }
-                try {
-                    val file = c.imageStore.importToDraft(uri, eventId)
-                    _ui.update { s -> s.copy(photos = s.photos + PhotoItem(file.name, file)) }
-                } catch (t: Throwable) {
-                    _ui.update { it.copy(message = "That image couldn't be opened. Try another photo.") }
-                }
-            }
-        }
-    }
-
-    fun removePhoto(item: PhotoItem) {
-        _ui.update { s ->
-            s.copy(
-                photos = s.photos - item,
-                removedPhotoIds = if (item.storedId != null) s.removedPhotoIds + item.storedId else s.removedPhotoIds,
-            )
-        }
-        if (item.storedId == null) item.file.delete()
+    fun hidePhotoTip() {
+        _ui.update { it.copy(showPhotoTip = false) }
+        viewModelScope.launch { c.settings.hidePhotoTip() }
     }
 
     // ------------------------------------------------------------------ validation & preview
@@ -242,16 +205,11 @@ class RefuelViewModel(private val c: AppContainer, private val existingId: Strin
             if (s.warnings.isNotEmpty() && !confirmedWarnings) { _ui.update { it.copy(askConfirmWarnings = true) }; return@launch }
             _ui.update { it.copy(step = Step.SAVING, askConfirmWarnings = false) }
             try {
-                c.repository.saveRefuel(ev, s.photos.filter { it.storedId == null }.map { it.file }, s.removedPhotoIds)
-                c.imageStore.clearDraft(eventId)
+                c.repository.saveRefuel(ev)
                 _ui.update { it.copy(step = Step.SAVED) }
             } catch (t: Throwable) {
                 _ui.update { it.copy(step = Step.FORM, message = "Couldn't save. Please try again.") }
             }
         }
-    }
-
-    override fun onCleared() {
-        if (_ui.value.step != Step.SAVED) c.imageStore.clearDraft(eventId)
     }
 }

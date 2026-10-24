@@ -29,6 +29,8 @@ import app.tel.domain.model.FuelType
 import app.tel.domain.model.UnitSystem
 import app.tel.domain.model.Vehicle
 import app.tel.ui.appContainer
+import app.tel.ui.csv.rememberCsvActions
+import androidx.compose.material3.OutlinedButton
 import app.tel.ui.vehicles.CurrencyPicker
 import app.tel.ui.vehicles.FuelTypePicker
 import app.tel.ui.vehicles.UnitSystemPicker
@@ -45,6 +47,19 @@ fun OnboardingScreen() {
     var units by rememberSaveable { mutableStateOf(UnitSystem.METRIC) }
     var currency by rememberSaveable { mutableStateOf("INR") }
     var saving by rememberSaveable { mutableStateOf(false) }
+    var message by rememberSaveable { mutableStateOf<String?>(null) }
+    val csv = rememberCsvActions(
+        onMessage = { message = it },
+        onRestored = {
+            // Restored from a CSV kept by an earlier install: skip setup.
+            val first = container.repository.allVehicles().firstOrNull()
+            with(container.settings) {
+                setUnitSystem(units)
+                first?.let { setSelectedVehicle(it.id); setDefaultCurrency(it.currencyCode) }
+                setOnboarded()
+            }
+        },
+    )
 
     val canSave = name.isNotBlank() && !saving
 
@@ -98,6 +113,14 @@ fun OnboardingScreen() {
                 enabled = canSave,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
             ) { Text("Get started") }
+            OutlinedButton(onClick = csv.useExisting, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Text("I have a Tel CSV file from before")
+            }
+            Text(
+                "Reinstalled Tel? Open the CSV file it kept for you to get all your fill-ups back.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary) }
         }
     }
 }

@@ -9,5 +9,7 @@ class TelApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        container.removeLegacyFiles()
+        container.csvCopy.start()
     }
 }

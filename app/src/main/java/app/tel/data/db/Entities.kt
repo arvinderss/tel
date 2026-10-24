@@ -56,21 +56,6 @@ data class RefuelEntity(
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
 )
 
-@Entity(
-    tableName = "images",
-    foreignKeys = [ForeignKey(entity = RefuelEntity::class, parentColumns = ["id"], childColumns = ["refueling_event_id"], onDelete = ForeignKey.CASCADE)],
-    indices = [Index("refueling_event_id")],
-)
-data class ImageEntity(
-    @PrimaryKey val id: String,
-    @ColumnInfo(name = "refueling_event_id") val refuelingEventId: String,
-    /** "photo" for new attachments; older records may hold before_hud | after_hud | pump_meter. */
-    @ColumnInfo(name = "image_type") val imageType: String,
-    /** Path relative to the app's private files directory. */
-    @ColumnInfo(name = "local_path") val localPath: String,
-    @ColumnInfo(name = "created_at") val createdAt: Long,
-)
-
 @Entity(tableName = "settings")
 data class SettingEntity(
     @PrimaryKey val key: String,

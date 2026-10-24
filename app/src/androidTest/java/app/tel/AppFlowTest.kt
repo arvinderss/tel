@@ -71,8 +71,14 @@ class AppFlowTest {
         compose.onNodeWithText("Get started").performScrollTo().performClick()
         waitForText("No fill-ups yet.")
 
+        // The CSV reminder is shown until the user sets it up or declines.
+        waitForText("Keep a copy outside the app")
+        compose.onNodeWithText("Don't remind me").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Keep a copy outside the app").fetchSemanticsNodes().isEmpty() }
+
         // First fill-up: amount + rate -> volume is calculated.
         openForm()
+        waitForText("No time right now?")
         enter("field_total_cost", "3000")
         enter("field_price_per_unit", "100")
         waitForText("Calculated from the other two. Type to override.")

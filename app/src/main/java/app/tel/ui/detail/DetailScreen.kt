@@ -1,6 +1,5 @@
 package app.tel.ui.detail
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,11 +36,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.tel.data.AppSettings
-import app.tel.data.StoredImage
 import app.tel.domain.calc.Statistics
 import app.tel.domain.format.Formatter
 import app.tel.domain.model.MileageStatus
@@ -51,7 +47,6 @@ import app.tel.domain.units.Units
 import app.tel.ui.Dates
 import app.tel.ui.appContainer
 import app.tel.ui.components.ConfirmDialog
-import app.tel.ui.components.LocalPhoto
 import app.tel.ui.components.SectionTitle
 import kotlinx.coroutines.launch
 
@@ -62,12 +57,9 @@ fun DetailScreen(eventId: String, settings: AppSettings, onBack: () -> Unit, onE
     val scope = rememberCoroutineScope()
     val repo = container.repository
     val event by remember(eventId) { repo.observeEvent(eventId) }.collectAsStateWithLifecycle(null)
-    val images by remember(eventId) { repo.observeImages(eventId) }.collectAsStateWithLifecycle(emptyList())
     val vehicles by repo.vehicles.collectAsStateWithLifecycle(emptyList())
     val metrics by repo.metrics.collectAsStateWithLifecycle(emptyMap())
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
-    var deletePhoto by rememberSaveable { mutableStateOf<String?>(null) }
-    var viewPhoto by remember { mutableStateOf<StoredImage?>(null) }
     var everLoaded by remember { mutableStateOf(false) }
     val fmt = Formatter(settings.unitSystem)
 
@@ -100,12 +92,6 @@ fun DetailScreen(eventId: String, settings: AppSettings, onBack: () -> Unit, onE
                     Calculated(metrics[e.id], e, fmt)
                     if (e.notes.isNotBlank()) { SectionTitle("Notes"); Text(e.notes) }
 
-                    SectionTitle("Photos")
-                    if (images.isEmpty()) Text("No photos.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    images.forEachIndexed { i, img ->
-                        LocalPhoto(img.file, "Photo ${i + 1}. Tap to enlarge.", Modifier.fillMaxWidth().height(200.dp).clickable { viewPhoto = img })
-                        TextButton(onClick = { deletePhoto = img.id }) { Text("Delete this photo", color = MaterialTheme.colorScheme.error) }
-                    }
                     Spacer(Modifier.height(24.dp))
                 }
             }
@@ -114,24 +100,11 @@ fun DetailScreen(eventId: String, settings: AppSettings, onBack: () -> Unit, onE
 
     if (confirmDelete) {
         ConfirmDialog(
-            "Delete this fill-up?", "Its values and photos will be removed, and mileage for the following fill-ups recalculated.",
+            "Delete this fill-up?", "It will be removed, and mileage for the following fill-ups recalculated.",
             "Delete",
             onConfirm = { confirmDelete = false; scope.launch { repo.deleteRefuel(eventId) } },
             onDismiss = { confirmDelete = false },
         )
-    }
-    deletePhoto?.let { id ->
-        ConfirmDialog(
-            "Delete this photo?", "The fill-up and its values are kept. Only the photo is deleted.",
-            "Delete photo",
-            onConfirm = { deletePhoto = null; scope.launch { repo.deletePhoto(id) } },
-            onDismiss = { deletePhoto = null },
-        )
-    }
-    viewPhoto?.let { img ->
-        Dialog(onDismissRequest = { viewPhoto = null }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-            LocalPhoto(img.file, "Photo", Modifier.fillMaxWidth().padding(8.dp).height(560.dp).clickable { viewPhoto = null }, maxSide = 1600)
-        }
     }
 }
 

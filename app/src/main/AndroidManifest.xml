@@ -3,18 +3,16 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-      Tel is local-only. Libraries (ML Kit's logging transport) declare network
-      permissions; strip them so the OS itself guarantees nothing can leave the device.
-      No CAMERA permission is declared: photos are taken through the system camera app,
-      and existing photos are chosen through the system photo picker.
+      Tel is local-only. Network permissions that libraries might declare are stripped,
+      so the OS itself guarantees nothing can leave the device.
+      No storage permission is declared: the optional CSV copy uses a single file the user
+      picks in the system file dialog, which grants access to that one file only.
     -->
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
     <uses-permission android:name="android.permission.WAKE_LOCK" tools:node="remove" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" tools:node="remove" />
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
-
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:name=".TelApp"
@@ -36,16 +34,5 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
-
     </application>
 </manifest>

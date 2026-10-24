@@ -1,10 +1,6 @@
 package app.tel.ui.components
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,12 +27,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -44,9 +37,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.tel.ui.theme.FigureStyle
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.io.File
 
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
@@ -146,33 +136,6 @@ fun ConfirmDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
-}
-
-/** Loads a local photo off the main thread, downsampled for display. */
-@Composable
-fun LocalPhoto(file: File?, description: String, modifier: Modifier = Modifier, maxSide: Int = 600) {
-    val bitmap by produceState<Bitmap?>(null, file?.path, file?.lastModified()) {
-        value = file?.takeIf { it.exists() }?.let { f ->
-            withContext(Dispatchers.IO) {
-                val b = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeFile(f.path, b)
-                var s = 1
-                while (maxOf(b.outWidth, b.outHeight) / (s * 2) >= maxSide) s *= 2
-                BitmapFactory.decodeFile(f.path, BitmapFactory.Options().apply { inSampleSize = s })
-            }
-        }
-    }
-    Box(
-        modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) {
-        bitmap?.let { Image(it.asImageBitmap(), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
-            ?: Text(if (file == null) "No photo" else "Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp))
-    }
 }
 
 /** A short explanatory banner (info or warning) with icon + text. */
