@@ -21,24 +21,20 @@ fun Vehicle.toEntity() = VehicleEntity(
 )
 
 fun RefuelEntity.toDomain() = RefuelEvent(
-    id = id, vehicleId = vehicleId, timestamp = timestamp,
-    odometerBeforeKm = odometerBefore, odometerAfterKm = odometerAfter,
-    fuelLevelBeforePct = fuelLevelBefore, fuelLevelAfterPct = fuelLevelAfter,
+    id = id, vehicleId = vehicleId, timestamp = timestamp, odometerKm = odometer,
     fuelAddedL = fuelAdded, pricePerL = pricePerUnit, totalCost = totalCost,
-    currencyCode = currency, filledToFull = filledToFull, notes = notes,
+    currencyCode = currency, filledToFull = filledToFull, missedPrevious = missedPrevious, notes = notes,
     createdAt = createdAt, updatedAt = updatedAt,
 )
 
 fun RefuelEvent.toEntity(metrics: RefuelMetrics? = null) = RefuelEntity(
-    id = id, vehicleId = vehicleId, timestamp = timestamp,
-    odometerBefore = odometerBeforeKm, odometerAfter = odometerAfterKm,
-    fuelLevelBefore = fuelLevelBeforePct, fuelLevelAfter = fuelLevelAfterPct,
+    id = id, vehicleId = vehicleId, timestamp = timestamp, odometer = odometerKm,
     fuelAdded = fuelAddedL, fuelUnit = "L", pricePerUnit = pricePerL, totalCost = totalCost,
-    currency = currencyCode, filledToFull = filledToFull,
-    distanceSincePrevious = metrics?.distanceKm,
-    fuelConsumedEstimate = metrics?.fuelConsumedL,
+    currency = currencyCode, filledToFull = filledToFull, missedPrevious = missedPrevious,
+    distanceSincePrevious = metrics?.distanceSincePreviousKm,
+    fuelConsumed = metrics?.spanFuelL,
     mileage = metrics?.kmPerL,
     costPerDistance = metrics?.costPerKm,
-    calculationQuality = metrics?.quality?.name,
+    mileageStatus = metrics?.status?.name,
     notes = notes, createdAt = createdAt, updatedAt = updatedAt,
 )

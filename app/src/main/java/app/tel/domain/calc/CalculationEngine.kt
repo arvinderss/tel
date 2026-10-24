@@ -1,129 +1,107 @@
 package app.tel.domain.calc
 
-import app.tel.domain.model.CalculationQuality
-import app.tel.domain.model.ConsumptionMethod
+import app.tel.domain.model.MileageStatus
 import app.tel.domain.model.RefuelEvent
 import app.tel.domain.model.RefuelMetrics
 import java.math.BigDecimal
 import java.math.MathContext
 
 /**
- * Deterministic mileage / consumption engine. Pure Kotlin: no Android, no I/O.
+ * Deterministic mileage engine using the full-tank-to-full-tank method. Pure Kotlin.
  *
- * For each event (in chronological order, per vehicle) it computes the distance driven since the
- * previous fill and the fuel burnt over that distance, then km/L and cost per km.
+ * Mileage is only ever measured, never estimated:
  *
- * Fuel consumed between fill N-1 and fill N is the fuel that would be needed to bring the tank back
- * to the level it had when the car left fill N-1. Methods, best first:
+ *   km/L = (odometer at full fill B − odometer at previous full fill A)
+ *          ÷ (all litres added after A, up to and including B)
  *
- *  1. FULL_TO_FULL   – both fills were to full: consumed = fuel added now. (Measured)
- *  2. SAME_LEVEL     – gauge after both fills reads the same (±[sameLevelTolerancePct]):
- *                      consumed = fuel added now. (Measured)
- *  3. ADDED_ADJUSTED_BY_GAUGE – after-fill gauge differs and tank capacity is known:
- *                      consumed = added − (levelAfterNow − levelAfterPrev) × capacity. (Estimated)
- *  4. GAUGE_ONLY     – no fuel-added figure, but gauges + capacity known:
- *                      consumed = (levelAfterPrev − levelBeforeNow) × capacity. (Estimated)
- *  5. ADDED_ASSUMED_SAME_LEVEL – only fuel added is known: consumed = added. (Partial)
+ * Partial fills in between add their litres (and cost) to the stretch and get their figure
+ * at the next full tank. A fill marked "missed previous" starts a new stretch, because fuel
+ * from the unlogged fill-up is unknown. A missing odometer or volume inside a stretch makes it
+ * unmeasurable; the next full fill with an odometer starts over.
  */
-class CalculationEngine(
-    private val sameLevelTolerancePct: BigDecimal = BigDecimal("1.5"),
-) {
+class CalculationEngine {
     private val mc = MathContext.DECIMAL64
-    private val hundred = BigDecimal(100)
 
-    /** Sorts events chronologically; ties broken by odometer then creation time. */
+    /** Chronological order; ties broken by odometer, then creation time. */
     fun chronological(events: List<RefuelEvent>): List<RefuelEvent> =
         events.sortedWith(
             compareBy<RefuelEvent> { it.timestamp }
-                .thenBy { it.readingAtPumpKm ?: BigDecimal.ZERO }
+                .thenBy { it.odometerKm ?: BigDecimal.ZERO }
                 .thenBy { it.createdAt },
         )
 
-    /** Computes metrics for all events of ONE vehicle. */
-    fun compute(events: List<RefuelEvent>, tankCapacityL: BigDecimal?): Map<String, RefuelMetrics> {
+    /** Computes metrics for all fill-ups of ONE vehicle. */
+    fun compute(events: List<RefuelEvent>): Map<String, RefuelMetrics> {
         val ordered = chronological(events)
-        val result = LinkedHashMap<String, RefuelMetrics>()
-        ordered.forEachIndexed { i, ev ->
-            result[ev.id] = if (i == 0) {
-                RefuelMetrics(ev.id, isFirst = true, note = "Available after the next refuelling.")
-            } else {
-                computeOne(ordered[i - 1], ev, tankCapacityL)
+        val out = LinkedHashMap<String, RefuelMetrics>()
+
+        var anchor: RefuelEvent? = null       // last full fill with an odometer reading
+        var fuel = BigDecimal.ZERO            // litres added since the anchor
+        var cost: BigDecimal? = BigDecimal.ZERO // money spent since the anchor (null once unknown)
+        var fills = 0
+        var broken: String? = null            // why the current stretch can't be measured
+        var lastOdo: BigDecimal? = null
+
+        fun startStretch(e: RefuelEvent?) {
+            anchor = e?.takeIf { it.filledToFull && it.odometerKm != null }
+            fuel = BigDecimal.ZERO; cost = BigDecimal.ZERO; fills = 0; broken = null
+        }
+
+        for ((i, e) in ordered.withIndex()) {
+            val odo = e.odometerKm
+            val sincePrev = if (odo != null && lastOdo != null && !e.missedPrevious) odo.subtract(lastOdo) else null
+            if (odo != null) lastOdo = odo
+
+            if (i == 0 || e.missedPrevious) {
+                startStretch(e)
+                out[e.id] = RefuelMetrics(
+                    e.id, sincePrev,
+                    status = if (i == 0) MileageStatus.FIRST else MileageStatus.AFTER_GAP,
+                    note = if (e.filledToFull) "Mileage from the next full tank." else "Mileage starts from the next full tank.",
+                )
+                continue
             }
-        }
-        return result
-    }
 
-    fun computeOne(prev: RefuelEvent, cur: RefuelEvent, tankCapacityL: BigDecimal?): RefuelMetrics {
-        val prevReading = prev.readingAfterKm
-        val curReading = cur.readingAtPumpKm
-        if (prevReading == null || curReading == null) {
-            return RefuelMetrics(cur.id, note = "Odometer reading missing, so distance is unknown.")
-        }
-        val distance = curReading.subtract(prevReading)
-        if (distance.signum() <= 0) {
-            return RefuelMetrics(cur.id, distanceKm = distance, note = "Odometer is not higher than the previous refuelling.")
-        }
+            // Add this fill's fuel and money to the current stretch.
+            fills++
+            if (e.fuelAddedL == null) broken = broken ?: "Fuel volume missing on ${if (e.filledToFull) "this" else "a partial"} fill-up."
+            else fuel = fuel.add(e.fuelAddedL)
+            cost = if (cost == null || e.totalCost == null) null else cost!!.add(e.totalCost)
 
-        val consumption = fuelConsumed(prev, cur, tankCapacityL)
-        val consumed = consumption.litres
-        if (consumed == null || consumed.signum() <= 0) {
-            return RefuelMetrics(
-                cur.id, distanceKm = distance,
-                note = if (consumed != null) "Fuel figures give a non-positive consumption; please check them." else "Fuel added is unknown.",
-            )
-        }
-
-        val kmPerL = distance.divide(consumed, mc)
-        val unitPrice = cur.pricePerL ?: run {
-            val added = cur.fuelAddedL
-            if (cur.totalCost != null && added != null && added.signum() > 0) cur.totalCost.divide(added, mc) else null
-        }
-        val costPerKm = unitPrice?.multiply(consumed, mc)?.divide(distance, mc)
-
-        return RefuelMetrics(
-            eventId = cur.id,
-            distanceKm = distance,
-            fuelConsumedL = consumed,
-            kmPerL = kmPerL,
-            costPerKm = costPerKm,
-            quality = consumption.quality,
-            method = consumption.method,
-        )
-    }
-
-    data class Consumption(val litres: BigDecimal?, val method: ConsumptionMethod, val quality: CalculationQuality)
-
-    fun fuelConsumed(prev: RefuelEvent, cur: RefuelEvent, tankCapacityL: BigDecimal?): Consumption {
-        val added = cur.fuelAddedL
-        val cap = tankCapacityL?.takeIf { it.signum() > 0 }
-        val prevAfter = prev.fuelLevelAfterPct
-        val curAfter = cur.fuelLevelAfterPct
-        val curBefore = cur.fuelLevelBeforePct
-
-        if (added != null && prev.filledToFull && cur.filledToFull) {
-            return Consumption(added, ConsumptionMethod.FULL_TO_FULL, CalculationQuality.MEASURED)
-        }
-        if (added != null && prevAfter != null && curAfter != null) {
-            val diff = curAfter.subtract(prevAfter)
-            if (diff.abs() <= sameLevelTolerancePct) {
-                return Consumption(added, ConsumptionMethod.SAME_LEVEL, CalculationQuality.MEASURED)
+            if (!e.filledToFull) {
+                out[e.id] = RefuelMetrics(e.id, sincePrev, MileageStatus.PARTIAL, spanFills = fills,
+                    note = if (anchor == null) "Mileage starts from the next full tank." else "Counted at the next full tank.")
+                continue
             }
-            if (cap != null) {
-                val adjust = diff.divide(hundred, mc).multiply(cap, mc)
-                return Consumption(added.subtract(adjust), ConsumptionMethod.ADDED_ADJUSTED_BY_GAUGE, CalculationQuality.ESTIMATED)
-            }
-        }
-        if (cap != null && prevAfter != null && curBefore != null) {
-            val drop = prevAfter.subtract(curBefore)
-            return Consumption(drop.divide(hundred, mc).multiply(cap, mc), ConsumptionMethod.GAUGE_ONLY, CalculationQuality.ESTIMATED)
-        }
-        if (added != null) {
-            return Consumption(added, ConsumptionMethod.ADDED_ASSUMED_SAME_LEVEL, CalculationQuality.PARTIAL)
-        }
-        return Consumption(null, ConsumptionMethod.NONE, CalculationQuality.INSUFFICIENT)
-    }
 
-    /** Estimated fuel in the tank for a gauge reading. Always an estimate: gauges are not linear. */
-    fun estimatedVolumeL(levelPct: BigDecimal, tankCapacityL: BigDecimal): BigDecimal =
-        levelPct.divide(hundred, mc).multiply(tankCapacityL, mc)
+            val a = anchor
+            val metrics = when {
+                a == null -> RefuelMetrics(e.id, sincePrev, MileageStatus.FIRST, note = "Mileage from the next full tank.")
+                odo == null -> RefuelMetrics(e.id, sincePrev, MileageStatus.MISSING_DATA, note = "Odometer reading missing.")
+                broken != null -> RefuelMetrics(e.id, sincePrev, MileageStatus.MISSING_DATA, note = broken)
+                else -> {
+                    val distance = odo.subtract(a.odometerKm!!)
+                    when {
+                        distance.signum() <= 0 -> RefuelMetrics(e.id, sincePrev, MileageStatus.MISSING_DATA, note = "Odometer isn't higher than the previous full tank.")
+                        fuel.signum() <= 0 -> RefuelMetrics(e.id, sincePrev, MileageStatus.MISSING_DATA, note = "No fuel recorded in this stretch.")
+                        else -> RefuelMetrics(
+                            eventId = e.id,
+                            distanceSincePreviousKm = sincePrev,
+                            status = MileageStatus.MEASURED,
+                            spanDistanceKm = distance,
+                            spanFuelL = fuel,
+                            spanCost = cost,
+                            kmPerL = distance.divide(fuel, mc),
+                            costPerKm = cost?.divide(distance, mc),
+                            spanFills = fills,
+                        )
+                    }
+                }
+            }
+            out[e.id] = metrics
+            // This full fill closes the stretch and (if it has an odometer) anchors the next one.
+            startStretch(e)
+        }
+        return out
+    }
 }

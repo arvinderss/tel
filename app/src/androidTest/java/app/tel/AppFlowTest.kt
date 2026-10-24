@@ -3,6 +3,7 @@ package app.tel
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -20,8 +21,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The acceptance scenario, driven through the real UI with manual entry
- * (OCR is exercised by the parser unit tests; photos need a camera or picker).
+ * The main scenario, driven through the real UI (photos need a camera or picker, so they are
+ * covered by the repository tests instead).
  */
 @RunWith(AndroidJUnit4::class)
 class AppFlowTest {
@@ -36,9 +37,9 @@ class AppFlowTest {
 
     @After fun close() { scenario?.close() }
 
-    private fun waitForText(text: String) {
+    private fun waitForText(text: String, substring: Boolean = false) {
         try {
-            compose.waitUntil(15_000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() }
+            compose.waitUntil(15_000) { compose.onAllNodesWithText(text, substring = substring).fetchSemanticsNodes().isNotEmpty() }
         } catch (t: Throwable) {
             val screen = runCatching {
                 compose.onAllNodes(androidx.compose.ui.test.isRoot()).fetchSemanticsNodes().flatMap { root ->
@@ -57,29 +58,49 @@ class AppFlowTest {
         compose.onNodeWithTag(tag).performTextInput(value)
     }
 
-    private fun addRefuel(odo: String, litres: String, price: String) {
-        compose.onAllNodesWithText("Add refuelling")[0].performScrollTo().performClick()
-        waitForText("Enter values manually")
-        compose.onNodeWithText("Enter values manually").performScrollTo().performClick()
-        waitForText("Review refuelling")
-        enter("field_odometer_before", odo)
-        enter("field_fuel_added", litres)
-        enter("field_price_per_unit", price)
-        compose.onNodeWithText("Save refuelling").performScrollTo().performClick()
-        waitForText("Total spend")
+    private fun openForm() {
+        compose.onAllNodesWithText("Add fill-up")[0].performScrollTo().performClick()
+        waitForText("Tank full")
     }
 
-    @Test fun onboardingThenTwoRefuelsThenSwitchUnits() {
+    private fun save() {
+        compose.onNodeWithText("Save").performScrollTo().performClick()
+    }
+
+    @Test fun onboardingThenTwoFillUpsThenSwitchUnits() {
         waitForText("Get started")
         compose.onNodeWithText("Get started").performScrollTo().performClick()
-        waitForText("No refuelling records yet.")
+        waitForText("No fill-ups yet.")
 
-        addRefuel("50000", "30", "100")
-        compose.onNodeWithText("Available after the next refuelling").assertIsDisplayed()
+        // First fill-up: amount + rate -> volume is calculated.
+        openForm()
+        enter("field_total_cost", "3000")
+        enter("field_price_per_unit", "100")
+        waitForText("Calculated from the other two. Type to override.")
+        enter("field_odometer", "50000")
+        save()
+        waitForText("Total spend")
+        compose.onNodeWithText("Shown after two full-tank fill-ups").assertIsDisplayed()
 
-        addRefuel("50600", "40", "100")
-        // 600 km / 40 L = 15.0 km/L; full-tank flag off -> partial but still shown.
+        // Second: the rate is prefilled from the first, so the amount alone gives the volume.
+        openForm()
+        waitForText("From your fill-up on", substring = true)
+        enter("field_total_cost", "4000")
+        enter("field_odometer", "50600")
+        waitForText("600 km")
+        save()
+        // 600 km / 40 L
         waitForText("15.0 km/L")
+
+        // A lower odometer than the previous fill-up is an error and blocks saving.
+        openForm()
+        enter("field_total_cost", "1000")
+        enter("field_odometer", "50500")
+        waitForText("Lower than the earlier fill-up", substring = true)
+        save()
+        compose.onNodeWithText("Tank full").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").performClick()
+        waitForText("Total spend")
 
         compose.onNodeWithText("Settings").performClick()
         waitForText("US (miles, US gallons, MPG)")

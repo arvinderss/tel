@@ -2,7 +2,6 @@ package app.tel.data
 
 import androidx.room.withTransaction
 import app.tel.data.db.ImageEntity
-import app.tel.data.db.OcrResultEntity
 import app.tel.data.db.RefuelEntity
 import app.tel.data.db.SettingEntity
 import app.tel.data.db.TelDatabase
@@ -46,7 +45,8 @@ class BackupManager(
     private val appVersion: String,
 ) {
     companion object {
-        const val FORMAT = 1
+        /** 2: single odometer, missed-fill flag, no OCR data. Format 1 backups are still restored. */
+        const val FORMAT = 2
         private const val MANIFEST = "manifest.json"
         private const val DATA = "data.json"
         private const val FILES = "files/"
@@ -62,16 +62,16 @@ class BackupManager(
     suspend fun exportCsv(out: OutputStream) = withContext(Dispatchers.IO) {
         val vehicles = db.vehicles().all().associateBy { it.id }
         val sb = StringBuilder()
-        sb.append("date_utc,vehicle,odometer_before_km,odometer_after_km,fuel_level_before_pct,fuel_level_after_pct,")
-        sb.append("fuel_added_l,price_per_l,total_cost,currency,filled_to_full,distance_km,fuel_consumed_l,km_per_l,cost_per_km,calculation_quality,notes\n")
+        sb.append("date_utc,vehicle,odometer_km,amount,currency,price_per_l,fuel_added_l,filled_to_full,missed_previous,")
+        sb.append("distance_since_previous_km,fuel_used_l,km_per_l,cost_per_km,mileage_status,notes\n")
         for (e in db.refuels().all().sortedBy { it.timestamp }) {
             val cells = listOf(
                 Instant.ofEpochMilli(e.timestamp).toString(),
                 vehicles[e.vehicleId]?.name ?: e.vehicleId,
-                e.odometerBefore.s(), e.odometerAfter.s(), e.fuelLevelBefore.s(), e.fuelLevelAfter.s(),
-                e.fuelAdded.s(), e.pricePerUnit.s(), e.totalCost.s(), e.currency, e.filledToFull.toString(),
-                e.distanceSincePrevious.s(), e.fuelConsumedEstimate.s(4), e.mileage.s(3), e.costPerDistance.s(4),
-                e.calculationQuality ?: "", e.notes,
+                e.odometer.s(), e.totalCost.s(), e.currency, e.pricePerUnit.s(), e.fuelAdded.s(),
+                e.filledToFull.toString(), e.missedPrevious.toString(),
+                e.distanceSincePrevious.s(), e.fuelConsumed.s(3), e.mileage.s(3), e.costPerDistance.s(4),
+                e.mileageStatus ?: "", e.notes,
             )
             sb.append(cells.joinToString(",") { csv(it) }).append('\n')
         }
@@ -114,23 +114,18 @@ class BackupManager(
         }))
         o.put("refueling_events", JSONArray(db.refuels().all().map { e ->
             JSONObject().put("id", e.id).put("vehicle_id", e.vehicleId).put("timestamp", e.timestamp)
-                .put("odometer_before", e.odometerBefore.j()).put("odometer_after", e.odometerAfter.j())
-                .put("fuel_level_before", e.fuelLevelBefore.j()).put("fuel_level_after", e.fuelLevelAfter.j())
+                .put("odometer", e.odometer.j())
                 .put("fuel_added", e.fuelAdded.j()).put("fuel_unit", e.fuelUnit)
                 .put("price_per_unit", e.pricePerUnit.j()).put("total_cost", e.totalCost.j()).put("currency", e.currency)
-                .put("filled_to_full", e.filledToFull)
-                .put("distance_since_previous", e.distanceSincePrevious.j()).put("fuel_consumed_estimate", e.fuelConsumedEstimate.j())
+                .put("filled_to_full", e.filledToFull).put("missed_previous", e.missedPrevious)
+                .put("distance_since_previous", e.distanceSincePrevious.j()).put("fuel_consumed", e.fuelConsumed.j())
                 .put("mileage", e.mileage.j()).put("cost_per_distance", e.costPerDistance.j())
-                .put("calculation_quality", e.calculationQuality ?: JSONObject.NULL)
+                .put("mileage_status", e.mileageStatus ?: JSONObject.NULL)
                 .put("notes", e.notes).put("created_at", e.createdAt).put("updated_at", e.updatedAt)
         }))
         o.put("images", JSONArray(db.images().all().map { i ->
             JSONObject().put("id", i.id).put("refueling_event_id", i.refuelingEventId).put("image_type", i.imageType)
                 .put("local_path", i.localPath).put("created_at", i.createdAt)
-        }))
-        o.put("ocr_results", JSONArray(db.ocrResults().all().map { r ->
-            JSONObject().put("id", r.id).put("image_id", r.imageId).put("field_name", r.fieldName).put("raw_text", r.rawText)
-                .put("parsed_value", r.parsedValue.j()).put("confidence", r.confidence.toDouble()).put("created_at", r.createdAt)
         }))
         o.put("settings", JSONArray(db.settings().all().map { JSONObject().put("key", it.key).put("value", it.value) }))
         return o
@@ -188,6 +183,7 @@ class BackupManager(
                 }
             }
             val d = data ?: throw BackupException("The backup has no data.")
+            val format = d.optInt("format", 1)
             val vehicles = d.getJSONArray("vehicles").objects().map { v ->
                 VehicleEntity(
                     id = v.getString("id"), name = v.getString("name"), make = v.optString("make"), model = v.optString("model"),
@@ -199,22 +195,22 @@ class BackupManager(
             val events = d.getJSONArray("refueling_events").objects().map { e ->
                 RefuelEntity(
                     id = e.getString("id"), vehicleId = e.getString("vehicle_id"), timestamp = e.getLong("timestamp"),
-                    odometerBefore = e.dec("odometer_before"), odometerAfter = e.dec("odometer_after"),
-                    fuelLevelBefore = e.dec("fuel_level_before"), fuelLevelAfter = e.dec("fuel_level_after"),
+                    // Format 1 had before/after readings; use "before", falling back to "after".
+                    odometer = e.dec("odometer") ?: e.dec("odometer_before") ?: e.dec("odometer_after"),
                     fuelAdded = e.dec("fuel_added"), fuelUnit = e.optString("fuel_unit", "L"),
                     pricePerUnit = e.dec("price_per_unit"), totalCost = e.dec("total_cost"), currency = e.optString("currency", "INR"),
-                    filledToFull = e.optBoolean("filled_to_full"), notes = e.optString("notes"),
+                    // Format 1 defaulted the full-tank switch to off; treat those fills as full (see MIGRATION_1_2).
+                    filledToFull = if (format < 2) true else e.optBoolean("filled_to_full", true),
+                    missedPrevious = e.optBoolean("missed_previous", false),
+                    notes = e.optString("notes"),
                     createdAt = e.optLong("created_at"), updatedAt = e.optLong("updated_at"),
                 )
             }
             val imgs = d.optJSONArray("images")?.objects().orEmpty().map { i ->
                 ImageEntity(i.getString("id"), i.getString("refueling_event_id"), i.getString("image_type"), i.getString("local_path"), i.optLong("created_at"))
             }.filter { img -> !img.localPath.contains("..") }
-            val ocr = d.optJSONArray("ocr_results")?.objects().orEmpty().map { r ->
-                OcrResultEntity(r.getString("id"), r.getString("image_id"), r.optString("field_name"), r.optString("raw_text"),
-                    r.dec("parsed_value"), r.optDouble("confidence", 0.0).toFloat(), r.optLong("created_at"))
-            }
             val settings = d.optJSONArray("settings")?.objects().orEmpty().map { SettingEntity(it.getString("key"), it.getString("value")) }
+                .filter { it.key != "ocr_sensitivity" }
 
             if (mode == RestoreMode.REPLACE) repository.deleteAll()
             db.withTransaction {
@@ -223,8 +219,6 @@ class BackupManager(
                 db.refuels().insertIgnore(events.filter { it.vehicleId in vehicleIds })
                 val eventIds = db.refuels().all().map { it.id }.toSet()
                 db.images().insertIgnore(imgs.filter { it.refuelingEventId in eventIds })
-                val imageIds = db.images().all().map { it.id }.toSet()
-                db.ocrResults().insertIgnore(ocr.filter { it.imageId in imageIds })
                 if (mode == RestoreMode.REPLACE) db.settings().putAll(settings)
             }
             // Move photos into place (never overwrite an existing photo when merging).

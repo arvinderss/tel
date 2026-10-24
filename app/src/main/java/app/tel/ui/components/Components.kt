@@ -19,8 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -45,7 +43,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import app.tel.domain.model.ValueSource
 import app.tel.ui.theme.FigureStyle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -85,24 +82,6 @@ fun StatRow(a: @Composable (Modifier) -> Unit, b: @Composable (Modifier) -> Unit
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         a(Modifier.weight(1f))
         b(Modifier.weight(1f))
-    }
-}
-
-/** Shows where a value came from, with an icon *and* text (never colour alone). */
-@Composable
-fun SourceTag(source: ValueSource, needsReview: Boolean, confidence: Float? = null) {
-    val (text, icon, color) = when {
-        needsReview && source == ValueSource.OCR -> Triple("Needs review", Icons.Filled.Warning, MaterialTheme.colorScheme.tertiary)
-        source == ValueSource.OCR -> Triple("Read from photo", Icons.Filled.Check, MaterialTheme.colorScheme.primary)
-        source == ValueSource.USER -> Triple("Edited", Icons.Filled.Edit, MaterialTheme.colorScheme.onSurfaceVariant)
-        source == ValueSource.CALCULATED -> Triple("Calculated", Icons.Filled.Info, MaterialTheme.colorScheme.secondary)
-        else -> return
-    }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(4.dp))
-        val pct = if (source == ValueSource.OCR && confidence != null) " · ${(confidence * 100).toInt()}%" else ""
-        Text(text + pct, style = MaterialTheme.typography.labelMedium, color = color)
     }
 }
 

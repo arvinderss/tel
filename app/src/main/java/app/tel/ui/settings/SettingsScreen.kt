@@ -38,7 +38,6 @@ import app.tel.BuildConfig
 import app.tel.data.AppSettings
 import app.tel.data.BackupException
 import app.tel.data.BackupPreview
-import app.tel.data.OcrSensitivity
 import app.tel.data.RestoreMode
 import app.tel.ui.Dates
 import app.tel.ui.appContainer
@@ -46,7 +45,6 @@ import app.tel.ui.components.Notice
 import app.tel.ui.components.SectionTitle
 import app.tel.ui.vehicles.CurrencyPicker
 import app.tel.ui.vehicles.FuelTypePicker
-import app.tel.ui.vehicles.RadioGroup
 import app.tel.ui.vehicles.ThemePicker
 import app.tel.ui.vehicles.UnitSystemPicker
 import kotlinx.coroutines.launch
@@ -115,15 +113,6 @@ fun SettingsScreen(settings: AppSettings, onManageVehicles: () -> Unit) {
             CurrencyPicker(settings.defaultCurrency) { c -> scope.launch { container.settings.setDefaultCurrency(c) } }
             FuelTypePicker(settings.defaultFuelType) { f -> scope.launch { container.settings.setDefaultFuelType(f) } }
 
-            SectionTitle("Photo reading (OCR)")
-            RadioGroup("Mark values as \"Needs review\"", settings.ocrSensitivity, OcrSensitivity.entries, { it.label }) { s ->
-                scope.launch { container.settings.setOcrSensitivity(s) }
-            }
-            Text(
-                "Reading runs on this device with a built-in model for Latin-script text and digits. Nothing is sent anywhere.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
             SectionTitle("Appearance")
             ThemePicker(settings.theme) { t -> scope.launch { container.settings.setTheme(t) } }
 
@@ -139,7 +128,7 @@ fun SettingsScreen(settings: AppSettings, onManageVehicles: () -> Unit) {
             }
 
             SectionTitle("Privacy")
-            Notice("Tel has no internet permission, no account, no analytics and no ads. Your records and photos never leave this device unless you export them.")
+            Notice("Tel has no internet permission, no account, no analytics and no ads. Your fill-ups and photos never leave this device unless you export them.")
             Text("Version ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(24.dp))
         }
@@ -151,7 +140,7 @@ fun SettingsScreen(settings: AppSettings, onManageVehicles: () -> Unit) {
             title = { Text("Restore this backup?") },
             text = {
                 Text(
-                    "Created: ${Dates.dateTime(p.createdAt)}\nVehicles: ${p.vehicles}\nRefuellings: ${p.transactions}\nPhotos: ${p.photos}\n\n" +
+                    "Created: ${Dates.dateTime(p.createdAt)}\nVehicles: ${p.vehicles}\nFill-ups: ${p.transactions}\nPhotos: ${p.photos}\n\n" +
                         "Replace deletes everything currently in Tel first. Merge adds only records you don't already have.",
                 )
             },
@@ -177,7 +166,7 @@ fun SettingsScreen(settings: AppSettings, onManageVehicles: () -> Unit) {
             title = { Text("Delete all data?") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("This permanently deletes every vehicle, refuelling, photo and setting. Make a backup first if you might need them. Type DELETE to confirm.")
+                    Text("This permanently deletes every vehicle, fill-up, photo and setting. Make a backup first if you might need them. Type DELETE to confirm.")
                     OutlinedTextField(wipeText, { wipeText = it }, singleLine = true, label = { Text("Type DELETE") })
                 }
             },

@@ -25,13 +25,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import app.tel.domain.format.Input
 import app.tel.domain.model.FuelType
 import app.tel.domain.model.UnitSystem
 import app.tel.domain.model.Vehicle
-import app.tel.domain.units.Units
 import app.tel.ui.appContainer
-import app.tel.ui.components.NumberField
 import app.tel.ui.vehicles.CurrencyPicker
 import app.tel.ui.vehicles.FuelTypePicker
 import app.tel.ui.vehicles.UnitSystemPicker
@@ -45,18 +42,11 @@ fun OnboardingScreen() {
     val scope = rememberCoroutineScope()
     var name by rememberSaveable { mutableStateOf("My Car") }
     var fuel by rememberSaveable { mutableStateOf(FuelType.PETROL) }
-    var tank by rememberSaveable { mutableStateOf("40") }
     var units by rememberSaveable { mutableStateOf(UnitSystem.METRIC) }
     var currency by rememberSaveable { mutableStateOf("INR") }
     var saving by rememberSaveable { mutableStateOf(false) }
 
-    val tankValue = Input.parse(tank)
-    val tankError = when {
-        Input.isInvalid(tank) -> "Enter a number"
-        tankValue != null && tankValue.signum() <= 0 -> "Must be more than zero"
-        else -> null
-    }
-    val canSave = name.isNotBlank() && tankError == null && !saving
+    val canSave = name.isNotBlank() && !saving
 
     Column(
         Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
@@ -79,11 +69,6 @@ fun OnboardingScreen() {
             )
             FuelTypePicker(fuel) { fuel = it }
             UnitSystemPicker(units) { units = it }
-            NumberField(
-                label = "Fuel tank capacity", value = tank, onChange = { tank = it },
-                unit = Units.volumeUnit(units), error = tankError,
-                supporting = { Text("Optional, but needed for gauge-based estimates.") },
-            )
             CurrencyPicker(currency) { currency = it }
             Spacer(Modifier.height(8.dp))
             Button(
@@ -95,7 +80,6 @@ fun OnboardingScreen() {
                         container.repository.saveVehicle(
                             Vehicle(
                                 id = id, name = name.trim(), fuelType = fuel,
-                                tankCapacityL = tankValue?.let { Units.displayToLitres(it, units) },
                                 currencyCode = currency,
                             ),
                         )

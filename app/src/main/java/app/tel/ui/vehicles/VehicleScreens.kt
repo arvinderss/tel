@@ -47,12 +47,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.tel.data.AppSettings
 import app.tel.domain.format.Formatter
-import app.tel.domain.format.Input
 import app.tel.domain.model.Vehicle
-import app.tel.domain.units.Units
 import app.tel.ui.appContainer
 import app.tel.ui.components.ConfirmDialog
-import app.tel.ui.components.NumberField
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -89,7 +86,6 @@ fun VehicleListScreen(settings: AppSettings, onBack: () -> Unit, onEdit: (String
                             Text(v.name, style = MaterialTheme.typography.titleMedium)
                             val details = listOfNotNull(
                                 v.fuelType.label,
-                                v.tankCapacityL?.let { "${fmt.volume(it, 0)} tank" },
                                 v.currencyCode,
                                 listOf(v.make, v.model).filter { it.isNotBlank() }.joinToString(" ").takeIf { it.isNotBlank() },
                             )
@@ -110,7 +106,6 @@ fun VehicleListScreen(settings: AppSettings, onBack: () -> Unit, onEdit: (String
 fun VehicleEditScreen(vehicleId: String?, settings: AppSettings, onDone: () -> Unit) {
     val container = appContainer()
     val scope = rememberCoroutineScope()
-    val units = settings.unitSystem
 
     var loaded by rememberSaveable { mutableStateOf(vehicleId == null) }
     var name by rememberSaveable { mutableStateOf("") }
@@ -118,6 +113,7 @@ fun VehicleEditScreen(vehicleId: String?, settings: AppSettings, onDone: () -> U
     var model by rememberSaveable { mutableStateOf("") }
     var year by rememberSaveable { mutableStateOf("") }
     var fuel by rememberSaveable { mutableStateOf(settings.defaultFuelType) }
+    // Tank capacity is no longer edited, but an existing value is kept.
     var tank by rememberSaveable { mutableStateOf("") }
     var currency by rememberSaveable { mutableStateOf(settings.defaultCurrency) }
     var registration by rememberSaveable { mutableStateOf("") }
@@ -130,22 +126,16 @@ fun VehicleEditScreen(vehicleId: String?, settings: AppSettings, onDone: () -> U
             container.repository.vehicle(vehicleId)?.let { v ->
                 name = v.name; make = v.make; model = v.model; year = v.year?.toString().orEmpty()
                 fuel = v.fuelType; currency = v.currencyCode; registration = v.registration; createdAt = v.createdAt
-                tank = Input.format(v.tankCapacityL?.let { Units.litresToDisplay(it, units) }, 1)
+                tank = v.tankCapacityL?.toPlainString().orEmpty()
             }
             eventCount = container.repository.eventsFor(vehicleId).size
             loaded = true
         }
     }
 
-    val tankValue = Input.parse(tank)
-    val tankError = when {
-        Input.isInvalid(tank) -> "Enter a number"
-        tankValue != null && tankValue.signum() <= 0 -> "Must be more than zero"
-        else -> null
-    }
     val yearValue = year.toIntOrNull()
     val yearError = if (year.isNotBlank() && (yearValue == null || yearValue !in 1900..2100)) "Enter a year like 2019" else null
-    val canSave = loaded && name.isNotBlank() && tankError == null && yearError == null
+    val canSave = loaded && name.isNotBlank() && yearError == null
 
     Scaffold(
         topBar = {
@@ -162,7 +152,6 @@ fun VehicleEditScreen(vehicleId: String?, settings: AppSettings, onDone: () -> U
             Column(Modifier.widthIn(max = 560.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(name, { name = it }, label = { Text("Vehicle name") }, singleLine = true, modifier = Modifier.fillMaxWidth(), isError = loaded && name.isBlank())
                 FuelTypePicker(fuel) { fuel = it }
-                NumberField("Fuel tank capacity", tank, { tank = it }, unit = Units.volumeUnit(units), error = tankError)
                 CurrencyPicker(currency) { currency = it }
                 OutlinedTextField(make, { make = it }, label = { Text("Make (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(model, { model = it }, label = { Text("Model (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -182,7 +171,7 @@ fun VehicleEditScreen(vehicleId: String?, settings: AppSettings, onDone: () -> U
                             container.repository.saveVehicle(
                                 Vehicle(
                                     id = id, name = name.trim(), make = make.trim(), model = model.trim(), year = yearValue,
-                                    fuelType = fuel, tankCapacityL = tankValue?.let { Units.displayToLitres(it, units) },
+                                    fuelType = fuel, tankCapacityL = tank.toBigDecimalOrNull(),
                                     currencyCode = currency, registration = registration.trim(), createdAt = createdAt,
                                 ),
                             )
@@ -204,7 +193,7 @@ fun VehicleEditScreen(vehicleId: String?, settings: AppSettings, onDone: () -> U
     if (confirmDelete && vehicleId != null) {
         ConfirmDialog(
             title = "Delete ${name.ifBlank { "vehicle" }}?",
-            message = "This permanently deletes the vehicle, its $eventCount refuelling record(s) and their photos. This can't be undone.",
+            message = "This permanently deletes the vehicle, its $eventCount fill-up(s) and their photos. This can't be undone.",
             confirmLabel = "Delete",
             onConfirm = {
                 confirmDelete = false

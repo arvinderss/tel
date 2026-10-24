@@ -8,7 +8,7 @@
 2. Release build (`assembleRelease`, minified)
 3. A permission check on the final APK. It fails if INTERNET, network-state, camera, location or storage permissions are present.
 4. Publishes `tel-1.0.<run>.apk` as a GitHub Release
-5. In parallel: device tests on an Android 11 emulator (database, backup/restore, onboarding → two refuellings → switch to US units)
+5. In parallel: device tests on an Android 11 emulator (database, v1→v2 migration, backup/restore, onboarding → two fill-ups → odometer check → switch to US units)
 
 The version code is the workflow run number, so each release installs over the previous one.
 

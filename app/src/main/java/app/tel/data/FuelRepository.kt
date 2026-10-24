@@ -2,10 +2,8 @@ package app.tel.data
 
 import androidx.room.withTransaction
 import app.tel.data.db.ImageEntity
-import app.tel.data.db.OcrResultEntity
 import app.tel.data.db.TelDatabase
 import app.tel.domain.calc.CalculationEngine
-import app.tel.domain.model.ImageType
 import app.tel.domain.model.RefuelEvent
 import app.tel.domain.model.RefuelMetrics
 import app.tel.domain.model.Vehicle
@@ -13,19 +11,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import java.io.File
-import java.math.BigDecimal
 import java.util.UUID
 
-data class OcrResultInput(val field: String, val raw: String, val value: BigDecimal?, val confidence: Float)
-
-/** A photo attached to a refuelling being saved: a new draft file, or an existing stored one. */
-sealed interface PhotoChange {
-    data class New(val draftFile: File, val ocr: List<OcrResultInput>) : PhotoChange
-    data class KeepWithOcr(val ocr: List<OcrResultInput>) : PhotoChange
-    data object Remove : PhotoChange
-}
-
-data class StoredImage(val id: String, val type: ImageType, val file: File, val relativePath: String)
+/** A photo attached to a fill-up. */
+data class StoredImage(val id: String, val file: File, val relativePath: String, val createdAt: Long)
 
 class FuelRepository(
     private val db: TelDatabase,
@@ -36,90 +25,69 @@ class FuelRepository(
     val vehicles: Flow<List<Vehicle>> = db.vehicles().observeAll().map { l -> l.map { it.toDomain() } }
     val events: Flow<List<RefuelEvent>> = db.refuels().observeAll().map { l -> l.map { it.toDomain() } }
 
-    /** Metrics for every event, computed per vehicle over its full history. */
-    val metrics: Flow<Map<String, RefuelMetrics>> = combine(vehicles, events) { vs, es -> computeAll(vs, es) }
+    /** Metrics for every fill-up, computed per vehicle over its full history. */
+    val metrics: Flow<Map<String, RefuelMetrics>> = combine(vehicles, events) { _, es -> computeAll(es) }
 
-    fun computeAll(vs: List<Vehicle>, es: List<RefuelEvent>): Map<String, RefuelMetrics> {
-        val caps = vs.associate { it.id to it.tankCapacityL }
-        return es.groupBy { it.vehicleId }.flatMap { (vid, list) -> engine.compute(list, caps[vid]).entries }
-            .associate { it.key to it.value }
-    }
+    fun computeAll(es: List<RefuelEvent>): Map<String, RefuelMetrics> =
+        es.groupBy { it.vehicleId }.flatMap { (_, list) -> engine.compute(list).entries }.associate { it.key to it.value }
 
     fun observeEvent(id: String): Flow<RefuelEvent?> = db.refuels().observe(id).map { it?.toDomain() }
 
-    fun observeImages(eventId: String): Flow<List<StoredImage>> = db.images().observeForEvent(eventId).map { l ->
-        l.mapNotNull { e -> ImageType.fromKey(e.imageType)?.let { StoredImage(e.id, it, images.fileFor(e.localPath), e.localPath) } }
-    }
+    fun observeImages(eventId: String): Flow<List<StoredImage>> =
+        db.images().observeForEvent(eventId).map { l -> l.map { it.toStored() }.sortedBy { it.createdAt } }
 
-    fun observeOcr(eventId: String): Flow<List<OcrResultEntity>> = db.ocrResults().observeForEvent(eventId)
+    private fun ImageEntity.toStored() = StoredImage(id, images.fileFor(localPath), localPath, createdAt)
 
     suspend fun vehicle(id: String): Vehicle? = db.vehicles().get(id)?.toDomain()
     suspend fun allVehicles(): List<Vehicle> = db.vehicles().all().map { it.toDomain() }
     suspend fun event(id: String): RefuelEvent? = db.refuels().get(id)?.toDomain()
     suspend fun eventsFor(vehicleId: String): List<RefuelEvent> = db.refuels().forVehicle(vehicleId).map { it.toDomain() }
-    suspend fun imagesFor(eventId: String): List<StoredImage> = db.images().forEvent(eventId).mapNotNull { e ->
-        ImageType.fromKey(e.imageType)?.let { StoredImage(e.id, it, images.fileFor(e.localPath), e.localPath) }
-    }
+    suspend fun imagesFor(eventId: String): List<StoredImage> = db.images().forEvent(eventId).map { it.toStored() }.sortedBy { it.createdAt }
 
     suspend fun saveVehicle(v: Vehicle): Vehicle {
         val now = clock()
         val existing = db.vehicles().get(v.id)
         val toSave = v.copy(createdAt = existing?.createdAt ?: now, updatedAt = now)
         db.vehicles().upsert(toSave.toEntity())
-        recompute(v.id)
         return toSave
     }
 
     suspend fun deleteVehicle(id: String) {
-        db.vehicles().delete(id) // cascades to events, images, OCR rows
+        db.vehicles().delete(id) // cascades to fill-ups and photo rows
         images.deleteVehicleDir(id)
     }
 
     /**
-     * Saves a refuelling with its photos and OCR results, then recomputes derived values
-     * for the whole vehicle history (an edit can change the next event's mileage too).
+     * Saves a fill-up, adds [newPhotos] (draft files), removes photos with ids in [removedPhotoIds],
+     * then recomputes derived values for the vehicle's whole history (an edit can change later fills).
      */
-    suspend fun saveRefuel(event: RefuelEvent, photos: Map<ImageType, PhotoChange>): RefuelEvent {
+    suspend fun saveRefuel(event: RefuelEvent, newPhotos: List<File> = emptyList(), removedPhotoIds: Set<String> = emptySet()): RefuelEvent {
         val now = clock()
         val existing = db.refuels().get(event.id)
         val toSave = event.copy(createdAt = existing?.createdAt ?: now, updatedAt = now)
-        // If the vehicle changed during an edit, its photos must move with it.
         val movedFrom = existing?.vehicleId?.takeIf { it != event.vehicleId }
 
         // Files first (outside the DB transaction), then all rows atomically.
-        val committed = HashMap<ImageType, String>()
-        for ((type, change) in photos) {
-            if (change is PhotoChange.New) committed[type] = images.commit(change.draftFile, event.vehicleId, event.id, type)
-        }
-        if (movedFrom != null) {
-            for (img in imagesFor(event.id)) {
-                if (img.type !in committed && photos[img.type] !is PhotoChange.Remove) {
-                    committed[img.type] = images.commit(img.file, event.vehicleId, event.id, img.type)
-                }
-            }
-        }
+        val committed = newPhotos.map { images.commit(it, event.vehicleId, event.id) }
+        val kept = db.images().forEvent(event.id).filter { it.id !in removedPhotoIds }
+        // If the vehicle changed during an edit, its photos move with it.
+        val moved = if (movedFrom != null) kept.associate { it.id to images.commit(images.fileFor(it.localPath), event.vehicleId, event.id) } else emptyMap()
 
         db.withTransaction {
             db.refuels().upsert(toSave.toEntity())
-            val current = db.images().forEvent(event.id).associateBy { it.imageType }
-            for (type in ImageType.entries) {
-                val change = photos[type]
-                val old = current[type.key]
-                when {
-                    change is PhotoChange.Remove -> if (old != null) db.images().delete(old.id)
-                    committed[type] != null -> {
-                        val id = old?.id ?: UUID.randomUUID().toString()
-                        db.images().upsert(ImageEntity(id, event.id, type.key, committed.getValue(type), old?.createdAt ?: now))
-                        val ocr = (change as? PhotoChange.New)?.ocr
-                        if (ocr != null) replaceOcr(id, ocr, now)
-                    }
-                    change is PhotoChange.KeepWithOcr && old != null -> replaceOcr(old.id, change.ocr, now)
-                }
+            for (id in removedPhotoIds) db.images().delete(id)
+            for ((id, path) in moved) db.images().get(id)?.let { db.images().upsert(it.copy(localPath = path)) }
+            committed.forEachIndexed { i, path ->
+                db.images().upsert(ImageEntity(UUID.randomUUID().toString(), event.id, "photo", path, now + i))
             }
         }
-        // Delete files of removed photos (and the old vehicle folder for a moved event).
-        for ((type, change) in photos) {
-            if (change is PhotoChange.Remove) images.delete("${images.relativeDir(event.vehicleId, event.id)}/${type.fileName}")
+        val referencedPaths = db.images().all().map { it.localPath }.toSet()
+        if (existing != null) {
+            // Delete files no longer referenced (removed photos).
+            images.fileFor(images.relativeDir(event.vehicleId, event.id)).listFiles()?.forEach { f ->
+                val rel = "${images.relativeDir(event.vehicleId, event.id)}/${f.name}"
+                if (rel !in referencedPaths) f.delete()
+            }
         }
         if (movedFrom != null) {
             images.deleteEventDir(movedFrom, event.id)
@@ -129,11 +97,6 @@ class FuelRepository(
         return toSave
     }
 
-    private suspend fun replaceOcr(imageId: String, ocr: List<OcrResultInput>, now: Long) {
-        db.ocrResults().deleteForImage(imageId)
-        db.ocrResults().insertAll(ocr.map { OcrResultEntity(UUID.randomUUID().toString(), imageId, it.field, it.raw, it.value, it.confidence, now) })
-    }
-
     suspend fun deleteRefuel(id: String) {
         val e = db.refuels().get(id) ?: return
         db.refuels().delete(id)
@@ -141,19 +104,22 @@ class FuelRepository(
         recompute(e.vehicleId)
     }
 
-    /** Deletes one photo but keeps the refuelling and its values. */
-    suspend fun deleteImage(eventId: String, type: ImageType) {
-        val img = db.images().forEvent(eventId).firstOrNull { it.imageType == type.key } ?: return
+    /** Deletes one photo but keeps the fill-up and its values. */
+    suspend fun deletePhoto(imageId: String) {
+        val img = db.images().get(imageId) ?: return
         db.images().delete(img.id)
         images.delete(img.localPath)
     }
 
-    /** Persists the engine's derived values into the schema's derived columns. */
+    /** Persists the engine's derived values into the schema's derived columns (used by exports). */
     suspend fun recompute(vehicleId: String) {
-        val v = db.vehicles().get(vehicleId) ?: return
         val events = db.refuels().forVehicle(vehicleId).map { it.toDomain() }
-        val m = engine.compute(events, v.tankCapacity)
+        val m = engine.compute(events)
         db.refuels().upsertAll(events.map { it.toEntity(m[it.id]) })
+    }
+
+    suspend fun recomputeAll() {
+        db.vehicles().all().forEach { recompute(it.id) }
     }
 
     suspend fun deleteAll() {

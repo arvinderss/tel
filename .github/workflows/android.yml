@@ -28,7 +28,7 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Unit tests (calculations, units, validation, OCR parsing)
+      - name: Unit tests (mileage, amount/rate/volume, units, validation)
         run: ./gradlew --no-daemon testDebugUnitTest 2>&1 | tee unit.log; exit ${PIPESTATUS[0]}
         shell: bash
 
@@ -74,12 +74,12 @@ jobs:
           body: |
             Offline fuel, mileage and cost tracker for Android.
             Install `tel-${{ env.TEL_VERSION_NAME }}.apk` (allow installs from this source when Android asks).
-            The app has no internet permission; all data and OCR stay on the device.
+            The app has no internet permission; all data and photos stay on the device.
           files: tel-*.apk
           make_latest: true
 
   instrumented:
-    name: Device tests (database, backup, UI flow)
+    name: Device tests (database, migration, backup, UI flow)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

@@ -2,12 +2,11 @@
 
 **Tel** (Punjabi/Hindi for *oil*) is an offline fuel, mileage and cost tracker for Android.
 
-Photograph your dashboard before and after filling up, photograph the pump display, check the numbers the app read, and save. Tel works out distance, mileage, cost per km and your spending trends. Everything happens on the phone.
+Log each fill-up in a few seconds: amount, rate and volume from the pump (enter any two and the third is calculated) plus the odometer. Tel works out distance, mileage, cost per km and your spending trends, all on the phone.
 
 - **No internet permission.** The APK cannot open a network connection. CI fails the build if one appears.
 - **No account, no analytics, no ads, no cloud.** Works in airplane mode.
-- **On-device OCR** using the bundled ML Kit text model that ships inside the APK.
-- **OCR is optional.** Every value can be typed or corrected by hand.
+- **Photos as proof.** Attach up to 3 photos (pump display, dashboard, receipt) to any fill-up. They're stored, not read.
 
 ## Install
 
@@ -15,94 +14,85 @@ Download the latest `tel-x.y.z.apk` from [Releases](../../releases) and open it 
 
 ## Using it
 
-1. **First launch:** name your vehicle, choose fuel type, tank size, units and currency.
-2. **Add refuelling:** add up to three photos. For each, either *Take photo* (the system camera) or *Choose photo* (the system photo picker).
-   1. Dashboard **before** filling (odometer, fuel level)
-   2. Dashboard **after** filling
-   3. The **pump display** (amount, litres, price)
-3. **Read photos.** Tel shows every value it found and where it came from: *Read from photo*, *Needs review*, *Edited* or *Calculated*. Tap a value to correct it, or tap one of the "other numbers in the photo".
-4. **Save.** The dashboard updates immediately.
+1. **First launch:** name your vehicle, choose fuel type, units and currency.
+2. **Add fill-up.** The form, top to bottom:
+   - **Date**: now, tap to change
+   - **Tank full**: on by default; turn off for a partial fill
+   - **Amount**, **Rate**, **Volume**: type any two and the third is calculated. The rate is prefilled from your last fill-up, so usually you only type the amount.
+   - **Odometer**: one reading at the pump, with your previous reading shown underneath. A reading lower than an earlier fill-up (or higher than a later one) is an error.
+   - **Photos** and **Notes** (optional)
+   - **Missed logging a fill-up**: turn on if you forgot to record one since the last entry
+3. **Save.** Only a completely empty entry is refused, so a missing odometer never stops you recording the cost.
 
-The first refuelling only sets the starting point. Mileage appears from the second one.
+### Amount, rate and volume
 
-Tip: switch on **Filled the tank to full** whenever the pump clicks off. Two full fills in a row give a *measured* mileage instead of an estimate.
+Once two are given, the third is calculated and marked *Calculated*. If you then type the third yourself, the value you entered *least recently* is recalculated instead, so your latest entries always win. A prefilled rate counts as the oldest. Calculated values are rounded the way pumps show them (2 decimals; 3 for US gallons).
 
-## How the numbers are calculated
+## How mileage is calculated
 
-Distance is the odometer now minus the odometer when you left the previous fill. Fuel used over that distance is worked out with the best method the data allows. The method and its quality are shown in each refuelling's details.
+Mileage is always measured, never estimated, using the full-tank-to-full-tank method:
 
-| Quality | When | Fuel used |
-|---|---|---|
-| Measured | Both fills to full, or the gauge after both fills reads the same | Fuel added now (pump-measured) |
-| Estimated | Gauge after the fills differs and tank capacity is known | Fuel added − (gauge change × tank capacity) |
-| Estimated | No fuel-added figure, but gauges and capacity are known | Gauge drop × tank capacity |
-| Partial | Only fuel added is known | Fuel added (assumes same level as last time) |
-| Insufficient | Odometer or fuel missing | Not calculated |
+```
+km/L = (odometer at this full tank − odometer at the previous full tank)
+       ÷ all litres added after the previous full tank, up to and including this one
+```
 
-Fuel gauges are not linear, so gauge-based figures are always labelled *Estimated*. Dashboard averages are sums, not averages of averages: average mileage = total distance / total fuel used, average price = total spent / total litres, cost per km = spend on fills with a known distance / that distance.
+- **Partial fills** add their litres and cost to the stretch and show "Partial fill"; the figure appears at the next full tank.
+- **Missed a fill-up** starts a new stretch, because the unlogged fuel is unknown. The fill-up still counts towards spending.
+- A missing odometer or volume inside a stretch makes it unmeasurable; the next full tank starts over.
+- Dashboard averages are sums, not averages of averages: mileage = total measured distance ÷ total fuel in those stretches; cost per km = money spent in those stretches ÷ their distance; average price = total spent ÷ total litres.
 
 Values are stored once, in kilometres, litres and price per litre, as exact decimals (no floating-point money). Switching between **Metric** and **US** (miles, US gallons at 3.785411784 L, MPG) only changes what is displayed.
-
-## How the photo reading works
-
-```
-photo → upright + downscale + strip EXIF (incl. GPS)
-      → 5 variants: original · contrast-stretched & sharpened · Otsu threshold · inverted · segment gaps closed
-      → on-device ML Kit text recognition on each
-      → parsers → confidence → you review
-```
-
-- **Pump display:** Tel collects every number and looks for the three that satisfy *litres × price ≈ amount*, allowing for display rounding. It works with any layout. Labels like "Amount", "₹", "Litres", "Rate" and "₹/L" refine the choice, and density readings are ignored. If the decimal point was missed ("408610"), Tel tests 4086.10 against the arithmetic. If nothing adds up, the values are flagged *Needs review*.
-- **Dashboard:** the odometer is the number next to "ODO" or followed by km/mi (never km/h, trip meters or range). The fuel level is a "%" value or a fraction such as 3/4. Many cars only have a needle gauge; in that case type the level in.
-- Values seen in more than one variant get higher confidence. Blurry or dark photos get a hint to retake them.
-- **Settings → Photo reading** controls how eagerly values are marked *Needs review*.
 
 ## Your data
 
 Settings → *Your data*:
 
-- **Back up (data + photos)** creates one `.zip` file at a location you choose. **Restore** shows what's inside (date, vehicles, refuellings, photos) before you choose *Merge* or *Replace*.
+- **Back up (data + photos)** creates one `.zip` file at a location you choose. **Restore** shows what's inside (date, vehicles, fill-ups, photos) before you choose *Merge* or *Replace*.
 - **Export history (CSV)** and **Export all data (JSON)**.
 - **Delete all data** requires typing `DELETE`.
 
 The database and photos live in the app's private storage, encrypted at rest by Android. Android cloud backup and device-to-device transfer are disabled for the app, so nothing is copied off the phone unless you export it.
 
-Photos are stored per refuelling as `files/data/vehicles/<vehicle>/transactions/<refuelling>/{before,after,pump}.jpg`. Each one can be deleted on its own without losing the values.
+Photos are stored per fill-up as `files/data/vehicles/<vehicle>/transactions/<fill-up>/photo-<id>.jpg`, re-encoded without location or camera metadata. Each one can be deleted on its own without losing the values.
 
 ## Permissions
 
-None that need approving. Photos are taken through the system camera app and chosen through the system photo picker, so Tel never asks for camera, storage or location access. Network permissions added by libraries are stripped in the manifest, and the CI build checks the final APK.
+None that need approving. Photos are taken through the system camera app and chosen through the system photo picker, so Tel never asks for camera, storage or location access. The CI build checks the final APK for network permissions.
 
 ## Project layout
 
 ```
 app/src/main/java/app/tel/
-  domain/            pure Kotlin, no Android: models, units, formatting,
-    calc/            calculation engine + dashboard statistics
+  domain/            pure Kotlin, no Android: models, units, formatting
+    calc/            mileage engine, dashboard statistics, amount/rate/volume calculator
     validation/      input checks (errors block saving, warnings ask)
-    ocr/             number extraction, pump-meter and dashboard parsers
-  ocr/               image preprocessing (pure) + ML Kit adapter + OCR service
-  data/              Room/SQLite schema, repositories, photo store, backup/export
-  ui/                Jetpack Compose screens: dashboard, refuel, history, detail, settings, vehicles
+  data/              Room/SQLite schema + migrations, repositories, photo store, backup/export
+  ui/                Jetpack Compose screens: dashboard, fill-up form, history, detail, settings, vehicles
 ```
 
-UI → ViewModel → domain → repositories → SQLite. The calculation engine and parsers have no Android dependencies and are covered by JVM unit tests.
+UI → ViewModel → domain → repositories → SQLite. The domain layer has no Android dependencies and is covered by JVM unit tests.
 
 ## Build
 
 Requirements: JDK 17, Android SDK (API 35). Android Studio works, or:
 
 ```bash
-./gradlew testDebugUnitTest        # unit tests: calculations, units, validation, OCR parsing
-./gradlew connectedDebugAndroidTest  # on a device/emulator: database, backup/restore, UI flow
+./gradlew testDebugUnitTest          # unit tests: mileage, amount/rate/volume, units, validation
+./gradlew connectedDebugAndroidTest  # on a device/emulator: database, migration, backup/restore, UI flow
 ./gradlew assembleRelease          # app/build/outputs/apk/release/app-release.apk
 ```
 
 Every push to `main` runs both test suites on GitHub Actions and publishes a signed APK as a GitHub Release. See [PACKAGING.md](PACKAGING.md) for signing with your own key.
 
+## Upgrading from 1.0.x
+
+The first versions read values from photos and recorded before/after odometer readings and fuel levels. On upgrade (and when restoring an old backup):
+
+- the odometer becomes the "before" reading, or the "after" reading if "before" was empty;
+- fuel levels and photo-reading results are dropped; photos are kept;
+- old entries are marked **Tank full**, because the old switch defaulted to off and the old maths treated those fills as refilled to the same level. Turn it off on any entry that was really a partial fill.
+
 ## Limitations
 
-- Android only. The domain layer (calculations, units, parsers) is plain Kotlin and could move to a Kotlin Multiplatform module for desktop or iOS; the UI, OCR adapter and storage are Android-specific.
-- No automatic perspective correction or cropping. Fill the frame with the display for best results.
-- OCR uses the Latin-script model. Digits on Indian, European and US pumps are fine; labels in other scripts are ignored, and the arithmetic check still works.
-- Seven-segment displays under glare can still be misread. That's why every value is shown for review.
+- Android only. The domain layer (mileage, units, validation) is plain Kotlin and could move to a Kotlin Multiplatform module for desktop or iOS.

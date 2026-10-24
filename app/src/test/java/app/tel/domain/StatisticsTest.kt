@@ -17,13 +17,13 @@ class StatisticsTest {
     private val zone: ZoneId = ZoneOffset.UTC
     private val engine = CalculationEngine()
 
-    private val a = event("50000", added = "30", price = "100", total = "3000", full = true, day = 1)
-    private val b = event("50600", added = "40", price = "110", total = "4400", full = true, day = 15)
-    private val c = event("51050", added = "30", price = "105", total = "3150", full = true, day = 30)
+    private val a = event("50000", added = "30", price = "100", total = "3000", day = 1)
+    private val b = event("50600", added = "40", price = "110", total = "4400", day = 15)
+    private val c = event("51050", added = "30", price = "105", total = "3150", day = 30)
     private val all = listOf(a, b, c)
 
     @Test fun totalsAndAverages() {
-        val s = Statistics.compute(all, engine.compute(all, bd("40")), zone)
+        val s = Statistics.compute(all, engine.compute(all), zone)
         assertEquals(3, s.refuelCount)
         assertClose("10550", s.totalSpend)
         assertClose("100", s.totalFuelL)
@@ -35,14 +35,24 @@ class StatisticsTest {
         assertClose("100", s.lowestPricePerL)
         assertClose("51050", s.latestOdometerKm)
         assertEquals(2, s.mileageSeries.size)
-        assertFalse(s.includesEstimates)
     }
 
     @Test fun singleEventHasNoMileage() {
-        val s = Statistics.compute(listOf(a), engine.compute(listOf(a), bd("40")), zone)
+        val s = Statistics.compute(listOf(a), engine.compute(listOf(a)), zone)
         assertNull(s.avgKmPerL)
         assertNull(s.avgCostPerKm)
         assertClose("3000", s.totalSpend)
+    }
+
+    @Test fun partialFillsCountInSpendButMileageIsMeasured() {
+        val p = event("50300", added = "10", price = "100", total = "1000", full = false, day = 8)
+        val list = listOf(a, p, b)
+        val s = Statistics.compute(list, engine.compute(list), zone)
+        // 600 km on 10 + 40 L = 12 km/L; spend in the stretch 1000 + 4400 = 5400 over 600 km
+        assertClose("12", s.avgKmPerL)
+        assertClose("9", s.avgCostPerKm)
+        assertClose("8400", s.totalSpend)
+        assertClose("600", s.totalDistanceKm)
     }
 
     @Test fun emptyIsAllNull() {
@@ -52,18 +62,18 @@ class StatisticsTest {
     }
 
     @Test fun multipleVehiclesAreComputedSeparately() {
-        val x1 = event("1000", added = "20", full = true, vehicle = "x", day = 2)
-        val x2 = event("1200", added = "10", full = true, vehicle = "x", day = 20)
-        val metrics = engine.compute(all, bd("40")) + engine.compute(listOf(x1, x2), bd("50"))
+        val x1 = event("1000", added = "20", vehicle = "x", day = 2)
+        val x2 = event("1200", added = "10", vehicle = "x", day = 20)
+        val metrics = engine.compute(all) + engine.compute(listOf(x1, x2))
         val s = Statistics.compute(all + x1 + x2, metrics, zone)
         // Car x: 200 km on 10 L. Car: 1050 km on 70 L. Combined 1250 / 80.
         assertClose("15.625", s.avgKmPerL)
-        assertTrue(metrics[x1.id]!!.isFirst)
+        assertEquals(app.tel.domain.model.MileageStatus.FIRST, metrics[x1.id]!!.status)
     }
 
     @Test fun otherCurrencyExcluded() {
         val usd = event("10", added = "10", total = "40", currency = "USD")
-        val s = Statistics.compute(all + usd, engine.compute(all, null), zone, preferredCurrency = "INR")
+        val s = Statistics.compute(all + usd, engine.compute(all), zone, preferredCurrency = "INR")
         assertEquals("INR", s.currencyCode)
         assertEquals(1, s.excludedOtherCurrency)
     }

@@ -6,7 +6,6 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
-import app.tel.domain.model.ImageType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -15,7 +14,7 @@ import java.util.UUID
 /**
  * Stores photos privately inside the app:
  *
- *   files/data/vehicles/<vehicle-id>/transactions/<transaction-id>/{before,after,pump}.jpg
+ *   files/data/vehicles/<vehicle-id>/transactions/<transaction-id>/photo-<id>.jpg
  *
  * Every stored photo is a fresh JPEG re-encoded from pixels, so EXIF metadata from the camera
  * (GPS location, device serials, timestamps) is not kept. Orientation is applied to the pixels first.
@@ -34,9 +33,9 @@ class ImageStore(private val context: Context) {
     }
 
     /** Copies a picked/captured image into the draft folder, upright, downscaled, metadata-free. */
-    suspend fun importToDraft(uri: Uri, draftId: String, type: ImageType): File = withContext(Dispatchers.IO) {
+    suspend fun importToDraft(uri: Uri, draftId: String): File = withContext(Dispatchers.IO) {
         val dir = File(draftsRoot, draftId).apply { mkdirs() }
-        val out = File(dir, type.fileName)
+        val out = File(dir, "photo-${UUID.randomUUID()}.jpg")
         val bitmap = decodeUpright(uri) ?: error("Unreadable image")
         out.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
         bitmap.recycle()
@@ -44,8 +43,8 @@ class ImageStore(private val context: Context) {
     }
 
     /** Moves a draft photo into its permanent location; returns the path relative to files/. */
-    suspend fun commit(draftFile: File, vehicleId: String, eventId: String, type: ImageType): String = withContext(Dispatchers.IO) {
-        val rel = "${relativeDir(vehicleId, eventId)}/${type.fileName}"
+    suspend fun commit(draftFile: File, vehicleId: String, eventId: String): String = withContext(Dispatchers.IO) {
+        val rel = "${relativeDir(vehicleId, eventId)}/${draftFile.name}"
         val dest = fileFor(rel)
         dest.parentFile?.mkdirs()
         if (draftFile.absolutePath != dest.absolutePath) {

@@ -99,11 +99,9 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
-    // Reads EXIF orientation so photos are upright before OCR (metadata is then discarded).
+    // Reads EXIF orientation so stored photos are upright (metadata is then discarded).
     implementation("androidx.exifinterface:exifinterface:1.3.7")
 
-    // On-device OCR. This is the *bundled* model: it ships inside the APK and never downloads anything.
-    implementation("com.google.mlkit:text-recognition:16.0.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

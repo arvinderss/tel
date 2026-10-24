@@ -44,15 +44,14 @@ import app.tel.ui.vehicles.VehicleListScreen
 
 object Routes {
     const val DASHBOARD = "dashboard"
-    const val REFUEL = "refuel?eventId={eventId}&reprocess={reprocess}"
+    const val REFUEL = "refuel?eventId={eventId}"
     const val HISTORY = "history"
     const val DETAIL = "detail/{id}"
     const val SETTINGS = "settings"
     const val VEHICLES = "vehicles"
     const val VEHICLE = "vehicle?vehicleId={vehicleId}"
 
-    fun refuel(eventId: String? = null, reprocess: Boolean = false) =
-        "refuel?eventId=${eventId ?: ""}&reprocess=$reprocess"
+    fun refuel(eventId: String? = null) = "refuel?eventId=${eventId ?: ""}"
     fun detail(id: String) = "detail/$id"
     fun vehicle(id: String? = null) = "vehicle?vehicleId=${id ?: ""}"
 }
@@ -135,17 +134,11 @@ private fun TelNavHost(nav: NavHostController, settings: AppSettings, modifier: 
         }
         composable(
             Routes.REFUEL,
-            arguments = listOf(
-                navArgument("eventId") { type = NavType.StringType; defaultValue = "" },
-                navArgument("reprocess") { type = NavType.BoolType; defaultValue = false },
-            ),
+            arguments = listOf(navArgument("eventId") { type = NavType.StringType; defaultValue = "" }),
         ) { entry ->
             val eventId = entry.arguments?.getString("eventId")?.takeIf { it.isNotEmpty() }
-            val reprocess = entry.arguments?.getBoolean("reprocess") ?: false
             RefuelScreen(
                 eventId = eventId,
-                reprocess = reprocess,
-                settings = settings,
                 onDone = {
                     nav.navigate(Routes.DASHBOARD) {
                         popUpTo(nav.graph.findStartDestination().id) { inclusive = false }
@@ -166,7 +159,6 @@ private fun TelNavHost(nav: NavHostController, settings: AppSettings, modifier: 
                 settings = settings,
                 onBack = { nav.popBackStack() },
                 onEdit = { nav.navigate(Routes.refuel(id)) },
-                onReprocess = { nav.navigate(Routes.refuel(id, reprocess = true)) },
             )
         }
         composable(Routes.SETTINGS) {

@@ -7,8 +7,6 @@ import app.tel.data.ImageStore
 import app.tel.data.SettingsRepository
 import app.tel.data.db.TelDatabase
 import app.tel.domain.calc.CalculationEngine
-import app.tel.ocr.MlKitTextReader
-import app.tel.ocr.OcrService
 
 /** Manual dependency injection: one place that builds the app's object graph. */
 class AppContainer(context: Context) {
@@ -19,5 +17,4 @@ class AppContainer(context: Context) {
     val repository: FuelRepository by lazy { FuelRepository(database, imageStore, engine) }
     val settings: SettingsRepository by lazy { SettingsRepository(database.settings()) }
     val backup: BackupManager by lazy { BackupManager(database, imageStore, BuildConfig.VERSION_NAME) }
-    val ocr: OcrService by lazy { OcrService(MlKitTextReader()) }
 }

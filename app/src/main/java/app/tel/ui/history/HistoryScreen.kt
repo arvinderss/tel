@@ -37,7 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.tel.data.AppSettings
 import app.tel.domain.calc.Statistics
 import app.tel.domain.format.Formatter
-import app.tel.domain.model.CalculationQuality
+import app.tel.domain.model.MileageStatus
 import app.tel.domain.model.RefuelEvent
 import app.tel.domain.model.RefuelMetrics
 import app.tel.domain.model.Vehicle
@@ -85,15 +85,15 @@ fun HistoryScreen(settings: AppSettings, onOpenEvent: (String) -> Unit, onAddRef
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     HistorySort.entries.forEach { s -> FilterChip(selected = s == sort, onClick = { sort = s }, label = { Text(s.label) }) }
                 }
-                Text("${shown.size} refuelling(s)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${shown.size} fill-up(s)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         if (shown.isEmpty()) {
             item {
                 Column(Modifier.padding(top = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("No refuelling records yet.", style = MaterialTheme.typography.titleMedium)
+                    Text("No fill-ups yet.", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(12.dp))
-                    Button(onClick = onAddRefuel) { Text("+ Add refuelling") }
+                    Button(onClick = onAddRefuel) { Text("+ Add fill-up") }
                 }
             }
         }
@@ -105,8 +105,11 @@ fun HistoryScreen(settings: AppSettings, onOpenEvent: (String) -> Unit, onAddRef
 
 @Composable
 private fun HistoryRow(e: RefuelEvent, m: RefuelMetrics?, vehicleName: String?, fmt: Formatter, onClick: () -> Unit) {
-    val mileage = m?.kmPerL?.let { fmt.economy(it) } ?: if (m?.isFirst == true) "First fill" else "—"
-    val estimated = m?.kmPerL != null && m.quality != CalculationQuality.MEASURED
+    val mileage = m?.kmPerL?.let { fmt.economy(it) } ?: when (m?.status) {
+        MileageStatus.PARTIAL -> "Partial fill"
+        MileageStatus.FIRST, MileageStatus.AFTER_GAP -> "Start"
+        else -> "—"
+    }
     val summary = "${Dates.date(e.timestamp)}, ${fmt.money(e.totalCost, e.currencyCode)}, ${fmt.volume(e.fuelAddedL)}, mileage $mileage"
     Card(
         Modifier.widthIn(max = 900.dp).fillMaxWidth().clickable(onClick = onClick).semantics(mergeDescendants = true) { contentDescription = summary },
@@ -116,13 +119,13 @@ private fun HistoryRow(e: RefuelEvent, m: RefuelMetrics?, vehicleName: String?, 
         Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(Dates.date(e.timestamp), style = MaterialTheme.typography.titleSmall)
-                val line2 = listOfNotNull(vehicleName, e.readingAtPumpKm?.let { fmt.distance(it) }, fmt.volume(e.fuelAddedL),
+                val line2 = listOfNotNull(vehicleName, e.odometerKm?.let { fmt.distance(it) }, fmt.volume(e.fuelAddedL),
                     Statistics.unitPrice(e)?.let { fmt.pricePerVolume(it, e.currencyCode) })
                 Text(line2.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text(fmt.money(e.totalCost, e.currencyCode), style = MaterialTheme.typography.titleSmall.merge(FigureStyle))
-                Text(mileage + if (estimated) " (est.)" else "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(mileage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

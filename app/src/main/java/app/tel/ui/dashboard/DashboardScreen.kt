@@ -91,11 +91,11 @@ fun DashboardScreen(settings: AppSettings, onAddRefuel: () -> Unit, onOpenEvent:
                             )
                         }
                         Button(onClick = onAddRefuel, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                            Icon(Icons.Filled.Add, null); Spacer(Modifier.padding(4.dp)); Text("Add refuelling")
+                            Icon(Icons.Filled.Add, null); Spacer(Modifier.padding(4.dp)); Text("Add fill-up")
                         }
                         val s = ui.stats
                         if (s == null || s.refuelCount == 0) {
-                            Notice("No refuelling in this period.")
+                            Notice("No fill-ups in this period.")
                         } else {
                             StatsBlock(s, ui.selected, fmt, onOpenEvent)
                         }
@@ -137,14 +137,14 @@ private fun EmptyState(onAddRefuel: () -> Unit) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
     ) {
         Column(Modifier.padding(24.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("No refuelling records yet.", style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+            Text("No fill-ups yet.", style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
             Text(
-                "Add your first refuelling to start tracking mileage and fuel costs.",
+                "Add your first fill-up to start tracking mileage and fuel costs.",
                 style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(onClick = onAddRefuel, modifier = Modifier.height(52.dp)) {
-                Icon(Icons.Filled.Add, null); Spacer(Modifier.padding(4.dp)); Text("Add refuelling")
+                Icon(Icons.Filled.Add, null); Spacer(Modifier.padding(4.dp)); Text("Add fill-up")
             }
         }
     }
@@ -162,7 +162,7 @@ private fun PeriodChips(selected: Period, onSelect: (Period) -> Unit) {
 @Composable
 private fun StatsBlock(s: DashboardStats, vehicle: Vehicle?, fmt: Formatter, onOpenEvent: (String) -> Unit) {
     val cur = s.currencyCode
-    val economyUnavailable = if (s.refuelCount <= 1) "Available after the next refuelling" else "Not enough data"
+    val economyUnavailable = "Shown after two full-tank fill-ups"
 
     if (vehicle != null && s.latestOdometerKm != null) {
         Card(
@@ -177,7 +177,7 @@ private fun StatsBlock(s: DashboardStats, vehicle: Vehicle?, fmt: Formatter, onO
     }
 
     StatRow(
-        { StatCard(s.avgKmPerL?.let { fmt.economy(it) } ?: "—", "Avg mileage", it, sub = if (s.avgKmPerL == null) economyUnavailable else if (s.includesEstimates) "Includes estimates" else null) },
+        { StatCard(s.avgKmPerL?.let { fmt.economy(it) } ?: "—", "Avg mileage", it, sub = if (s.avgKmPerL == null) economyUnavailable else null) },
         { StatCard(s.avgCostPerKm?.let { fmt.costPerDistance(it, cur) } ?: "—", "Avg cost per ${Units.distanceUnit(fmt.system)}", it) },
     )
     StatRow(
@@ -197,7 +197,7 @@ private fun StatsBlock(s: DashboardStats, vehicle: Vehicle?, fmt: Formatter, onO
         ) {
             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Last refuelling", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Last fill-up", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("${fmt.money(last.totalCost, last.currencyCode)} · ${fmt.volume(last.fuelAddedL)}", style = MaterialTheme.typography.titleMedium.merge(FigureStyle))
                 }
                 Text(Dates.date(last.timestamp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -240,7 +240,7 @@ private fun StatsBlock(s: DashboardStats, vehicle: Vehicle?, fmt: Formatter, onO
 
     SectionTitle("More figures")
     StatRow(
-        { StatCard(s.refuelCount.toString(), "Refuellings", it) },
+        { StatCard(s.refuelCount.toString(), "Fill-ups", it) },
         { StatCard(fmt.volume(s.avgFillL, 1), "Avg fill", it) },
     )
     StatRow(
@@ -248,7 +248,7 @@ private fun StatsBlock(s: DashboardStats, vehicle: Vehicle?, fmt: Formatter, onO
         { StatCard(s.estimatedAnnualCost?.let { fmt.money(it, cur, 0) } ?: "—", "Est. yearly cost", it, sub = if (s.estimatedAnnualCost == null) "Needs a month of data" else "At current pace") },
     )
     if (s.excludedOtherCurrency > 0) {
-        Notice("${s.excludedOtherCurrency} refuelling(s) in another currency are not included in these totals.")
+        Notice("${s.excludedOtherCurrency} fill-up(s) in another currency are not included in these totals.")
     }
 }
 

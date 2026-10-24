@@ -46,7 +46,7 @@ class DashboardViewModel(private val container: AppContainer) : ViewModel() {
         val zone = ZoneId.systemDefault()
         val range = TimeRange.of(sel.period, LocalDate.now(zone), zone, sel.customStart, sel.customEnd)
         val inRange = vehicleEvents.filter { it.timestamp in range }
-        val latestOdo = vehicleEvents.maxByOrNull { it.timestamp }?.readingAfterKm
+        val latestOdo = vehicleEvents.filter { it.odometerKm != null }.maxByOrNull { it.timestamp }?.odometerKm
         val stats = Statistics.compute(
             inRange, metrics, zone,
             latestOdometerKm = if (selected != null) latestOdo else null,

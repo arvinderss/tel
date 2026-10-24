@@ -36,10 +36,7 @@ data class RefuelEntity(
     @PrimaryKey val id: String,
     @ColumnInfo(name = "vehicle_id") val vehicleId: String,
     val timestamp: Long,
-    @ColumnInfo(name = "odometer_before") val odometerBefore: BigDecimal?,
-    @ColumnInfo(name = "odometer_after") val odometerAfter: BigDecimal?,
-    @ColumnInfo(name = "fuel_level_before") val fuelLevelBefore: BigDecimal?,
-    @ColumnInfo(name = "fuel_level_after") val fuelLevelAfter: BigDecimal?,
+    val odometer: BigDecimal?,
     @ColumnInfo(name = "fuel_added") val fuelAdded: BigDecimal?,
     /** Always "L": values are stored in litres and converted for display. */
     @ColumnInfo(name = "fuel_unit") val fuelUnit: String = "L",
@@ -47,12 +44,13 @@ data class RefuelEntity(
     @ColumnInfo(name = "total_cost") val totalCost: BigDecimal?,
     val currency: String,
     @ColumnInfo(name = "filled_to_full") val filledToFull: Boolean,
+    @ColumnInfo(name = "missed_previous") val missedPrevious: Boolean,
     // Derived values: recomputed by the calculation engine whenever this vehicle's history changes.
     @ColumnInfo(name = "distance_since_previous") val distanceSincePrevious: BigDecimal? = null,
-    @ColumnInfo(name = "fuel_consumed_estimate") val fuelConsumedEstimate: BigDecimal? = null,
+    @ColumnInfo(name = "fuel_consumed") val fuelConsumed: BigDecimal? = null,
     val mileage: BigDecimal? = null,
     @ColumnInfo(name = "cost_per_distance") val costPerDistance: BigDecimal? = null,
-    @ColumnInfo(name = "calculation_quality") val calculationQuality: String? = null,
+    @ColumnInfo(name = "mileage_status") val mileageStatus: String? = null,
     val notes: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
@@ -66,25 +64,10 @@ data class RefuelEntity(
 data class ImageEntity(
     @PrimaryKey val id: String,
     @ColumnInfo(name = "refueling_event_id") val refuelingEventId: String,
-    /** before_hud | after_hud | pump_meter */
+    /** "photo" for new attachments; older records may hold before_hud | after_hud | pump_meter. */
     @ColumnInfo(name = "image_type") val imageType: String,
     /** Path relative to the app's private files directory. */
     @ColumnInfo(name = "local_path") val localPath: String,
-    @ColumnInfo(name = "created_at") val createdAt: Long,
-)
-
-@Entity(
-    tableName = "ocr_results",
-    foreignKeys = [ForeignKey(entity = ImageEntity::class, parentColumns = ["id"], childColumns = ["image_id"], onDelete = ForeignKey.CASCADE)],
-    indices = [Index("image_id")],
-)
-data class OcrResultEntity(
-    @PrimaryKey val id: String,
-    @ColumnInfo(name = "image_id") val imageId: String,
-    @ColumnInfo(name = "field_name") val fieldName: String,
-    @ColumnInfo(name = "raw_text") val rawText: String,
-    @ColumnInfo(name = "parsed_value") val parsedValue: BigDecimal?,
-    val confidence: Float,
     @ColumnInfo(name = "created_at") val createdAt: Long,
 )
 

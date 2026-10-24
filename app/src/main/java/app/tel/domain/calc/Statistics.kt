@@ -1,6 +1,6 @@
 package app.tel.domain.calc
 
-import app.tel.domain.model.CalculationQuality
+import app.tel.domain.model.MileageStatus
 import app.tel.domain.model.RefuelEvent
 import app.tel.domain.model.RefuelMetrics
 import java.math.BigDecimal
@@ -73,8 +73,6 @@ data class DashboardStats(
     val mileageSeries: List<ChartPoint>,
     val priceSeries: List<ChartPoint>,
     val monthlySpend: List<MonthlySpend>,
-    /** True if some mileage figures in the period are estimates rather than measurements. */
-    val includesEstimates: Boolean,
     /** Events skipped because they use a different currency from [currencyCode]. */
     val excludedOtherCurrency: Int,
 )
@@ -109,19 +107,15 @@ object Statistics {
         val avgPrice = ratio(priced.mapNotNull { it.totalCost }.sumOrNull(), priced.mapNotNull { it.fuelAddedL }.sumOrNull())
 
         val ms = evs.mapNotNull { metrics[it.id] }
-        val withDistance = ms.filter { it.distanceKm != null && it.distanceKm.signum() > 0 }
-        val totalDistance = withDistance.mapNotNull { it.distanceKm }.sumOrNull()
+        val totalDistance = ms.mapNotNull { it.distanceSincePreviousKm?.takeIf { d -> d.signum() > 0 } }.sumOrNull()
 
-        val withEconomy = ms.filter { it.kmPerL != null && it.fuelConsumedL != null && it.distanceKm != null }
-        val avgKmPerL = ratio(withEconomy.mapNotNull { it.distanceKm }.sumOrNull(), withEconomy.mapNotNull { it.fuelConsumedL }.sumOrNull())
-
-        // Cost per distance: spend of fills that have a measured distance / that distance.
-        val distIds = withDistance.map { it.eventId }.toSet()
-        val distCost = evs.filter { it.id in distIds }.mapNotNull { it.totalCost }.sumOrNull()
-        val avgCostPerKm = ratio(distCost, totalDistance)
-
+        // Mileage and cost per km come only from measured full-to-full stretches.
+        val measured = ms.filter { it.status == MileageStatus.MEASURED && it.spanDistanceKm != null && it.spanFuelL != null }
+        val avgKmPerL = ratio(measured.mapNotNull { it.spanDistanceKm }.sumOrNull(), measured.mapNotNull { it.spanFuelL }.sumOrNull())
+        val costed = measured.filter { it.spanCost != null }
+        val avgCostPerKm = ratio(costed.mapNotNull { it.spanCost }.sumOrNull(), costed.mapNotNull { it.spanDistanceKm }.sumOrNull())
         val prices = evs.mapNotNull { unitPrice(it) }
-        val economies = withEconomy.mapNotNull { it.kmPerL }
+        val economies = measured.mapNotNull { it.kmPerL }
 
         val first = evs.firstOrNull()?.timestamp
         val last = evs.lastOrNull()?.timestamp
@@ -153,12 +147,11 @@ object Statistics {
             bestKmPerL = economies.maxOrNull(),
             worstKmPerL = economies.minOrNull(),
             estimatedAnnualCost = annual,
-            latestOdometerKm = latestOdometerKm ?: evs.mapNotNull { it.readingAfterKm }.maxOrNull(),
+            latestOdometerKm = latestOdometerKm ?: evs.mapNotNull { it.odometerKm }.maxOrNull(),
             lastEvent = evs.lastOrNull(),
             mileageSeries = evs.mapNotNull { e -> metrics[e.id]?.kmPerL?.let { ChartPoint(e.timestamp, it) } },
             priceSeries = evs.mapNotNull { e -> unitPrice(e)?.let { ChartPoint(e.timestamp, it) } },
             monthlySpend = monthly,
-            includesEstimates = withEconomy.any { it.quality != CalculationQuality.MEASURED },
             excludedOtherCurrency = excluded,
         )
     }
